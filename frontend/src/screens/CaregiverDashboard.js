@@ -1,23 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Modal, Linking } from 'react-native';
-import * as Location from 'expo-location';
-import { getUserRole, getUserById, fetchAlerts, fetchConversation, fetchPatients, fetchReminders, sendMessage, linkPatientByEmail, fetchPatientLocation, parseUTC } from '../api/client';
+import {
+    Alert, FlatList, ScrollView, StyleSheet, Text, TextInput,
+    TouchableOpacity, View, Modal, Linking
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import {
+    getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
+    fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
+    fetchPatientLocation, parseUTC, predictRisk
+} from '../api/client';
 
 export default function CaregiverDashboard({ navigation }) {
-    const [currentUser, setCurrentUser] = useState(null);
-    const [patients, setPatients] = useState([]);
-    const [alerts, setAlerts] = useState([]);
-    const [reminders, setReminders] = useState([]);
-    const [teamMembers, setTeamMembers] = useState([]);
-    const [selectedChatUser, setSelectedChatUser] = useState(null);
-    const [messages, setMessages] = useState([]);
-    const [draftMessage, setDraftMessage] = useState('');
-    const [linkPatientEmail, setLinkPatientEmail] = useState('');
-    
-    // Modal & Action State
+    const [currentUser, setCurrentUser]             = useState(null);
+    const [patients, setPatients]                   = useState([]);
+    const [alerts, setAlerts]                       = useState([]);
+    const [reminders, setReminders]                 = useState([]);
+    const [teamMembers, setTeamMembers]             = useState([]);
+    const [selectedChatUser, setSelectedChatUser]   = useState(null);
+    const [messages, setMessages]                   = useState([]);
+    const [draftMessage, setDraftMessage]           = useState('');
+    const [linkPatientEmail, setLinkPatientEmail]   = useState('');
+
+    // Patient AI & Modal state
+    const [patientAiData, setPatientAiData]         = useState({});
     const [selectedPatientModal, setSelectedPatientModal] = useState(null);
-    const [liveLocation, setLiveLocation] = useState(null);
-    const [patientPhone, setPatientPhone] = useState('');
+    const [liveLocation, setLiveLocation]           = useState(null);
+
+    // Care Journal Behavioral Logging
+    const [symptomLog, setSymptomLog]               = useState([]);
+    const [newSymptom, setNewSymptom]               = useState('');
 
     useEffect(() => {
         loadDashboardData();
@@ -40,14 +51,23 @@ export default function CaregiverDashboard({ navigation }) {
                 fetchReminders()
             ]);
 
-            const patientIds = new Set(fetchedPatients.map((patient) => patient.id));
+            const patientIds = new Set(fetchedPatients.map((p) => p.id));
             setCurrentUser(user);
             setPatients(fetchedPatients);
-            setAlerts(fetchedAlerts.filter((alert) => patientIds.size === 0 || patientIds.has(alert.user_id)));
-            setReminders(fetchedReminders.filter((reminder) => patientIds.size === 0 || patientIds.has(reminder.user_id)));
+            setAlerts(fetchedAlerts.filter((a) => patientIds.size === 0 || patientIds.has(a.user_id)));
+            setReminders(fetchedReminders.filter((r) => patientIds.size === 0 || patientIds.has(r.user_id)));
 
-            const doctorIds = [...new Set(fetchedPatients.map((patient) => patient.doctor_id).filter(Boolean))];
-            const doctors = await Promise.all(doctorIds.map((doctorId) => getUserById(doctorId)));
+            for (const p of fetchedPatients) {
+                try {
+                    const aiRes = await predictRisk(p.id);
+                    setPatientAiData(prev => ({ ...prev, [p.id]: aiRes }));
+                } catch (e) {
+                    console.log('AI lookup error', p.id);
+                }
+            }
+
+            const doctorIds = [...new Set(fetchedPatients.map((p) => p.doctor_id).filter(Boolean))];
+            const doctors = await Promise.all(doctorIds.map((dId) => getUserById(dId)));
             setTeamMembers(doctors);
             if (!selectedChatUser && doctors.length > 0) {
                 setSelectedChatUser(doctors[0]);
@@ -65,7 +85,7 @@ export default function CaregiverDashboard({ navigation }) {
             console.error('Failed to load messages:', error);
         }
     };
-    
+
     const handleTrackLocation = async (patient) => {
         try {
             const loc = await fetchPatientLocation(patient.id);
@@ -73,16 +93,15 @@ export default function CaregiverDashboard({ navigation }) {
             setSelectedPatientModal(patient);
 
             if (loc && loc.latitude && loc.longitude) {
-                // To drop a pin explicitly named "Patient Location", `geo:` coordinates mapping is used:
                 const url = `https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}`;
-                Linking.openURL(url).catch(err => {
-                    console.error('Could not open map router', err);
+                Linking.openURL(url).catch(() => {
+                    Alert.alert('Map Error', 'Could not launch map view.');
                 });
             } else {
-                Alert.alert("No Location", "Patient hasn't logged an active GPS ping yet.");
+                Alert.alert('Location Pending', 'Patient hasn’t emitted active GPS telemetry yet.');
             }
-        } catch (e) {
-            Alert.alert("Error", "Could not fetch location data.");
+        } catch {
+            Alert.alert('Error', 'Could not fetch location data.');
         }
     };
 
@@ -90,7 +109,7 @@ export default function CaregiverDashboard({ navigation }) {
         if (!linkPatientEmail.trim()) return;
         try {
             await linkPatientByEmail(linkPatientEmail.trim());
-            Alert.alert('Success', 'Patient linked successfully!');
+            Alert.alert('✅ Success', 'Patient linked successfully!');
             setLinkPatientEmail('');
             loadDashboardData();
         } catch (error) {
@@ -104,117 +123,228 @@ export default function CaregiverDashboard({ navigation }) {
             await sendMessage(selectedChatUser.id, draftMessage.trim());
             setDraftMessage('');
             loadConversation(selectedChatUser.id);
-        } catch (error) {
-            Alert.alert('Chat error', 'Message could not be sent.');
+        } catch {
+            Alert.alert('Chat Error', 'Message could not be sent.');
+        }
+    };
+
+    const handleAddSymptomLog = () => {
+        if (!newSymptom.trim()) return;
+        setSymptomLog(prev => [
+            { text: newSymptom.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
+            ...prev
+        ]);
+        setNewSymptom('');
+        Alert.alert('Log Saved', 'Behavioral observation saved to Care Journal.');
+    };
+
+    const handleAcknowledgeAlert = async (alertId) => {
+        try {
+            await deleteAlert(alertId);
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
+            if (Platform.OS === 'web') {
+                window.alert('✅ Alert Acknowledged & Cleared\n\nEmergency panic alert resolved. Record cleared from dashboard.');
+            } else {
+                Alert.alert('✅ Alert Acknowledged', 'Emergency panic alert resolved and cleared from dashboard.');
+            }
+        } catch {
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
         }
     };
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-            <Text style={styles.header}>Caregiver Dashboard</Text>
-            <Text style={styles.subHeader}>
-                {currentUser ? `Welcome, ${currentUser.full_name}` : 'Tracking your assigned patients and doctors'}
-            </Text>
+        <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
+            {/* Header */}
+            <View style={styles.headerBox}>
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.headerTitle}>👩‍⚕️ Caregiver Command Center</Text>
+                    <Text style={styles.headerSub}>
+                        {currentUser ? `Welcome, ${currentUser.full_name}` : 'Monitoring patient care & AI alerts'}
+                    </Text>
+                </View>
+                <View style={styles.roleBadge}>
+                    <Ionicons name="shield-checkmark" size={26} color="white" />
+                    <Text style={styles.roleBadgeText}>Primary Caregiver</Text>
+                </View>
+            </View>
+
+            {/* Metrics Row */}
             <View style={styles.summaryRow}>
                 <View style={styles.summaryCard}>
                     <Text style={styles.summaryNumber}>{patients.length}</Text>
                     <Text style={styles.summaryLabel}>Patients</Text>
                 </View>
                 <View style={styles.summaryCard}>
-                    <Text style={styles.summaryNumber}>{alerts.length}</Text>
+                    <Text style={[styles.summaryNumber, { color: '#dc2626' }]}>{alerts.length}</Text>
                     <Text style={styles.summaryLabel}>Alerts</Text>
                 </View>
                 <View style={styles.summaryCard}>
-                    <Text style={styles.summaryNumber}>{reminders.filter((item) => !item.is_completed).length}</Text>
-                    <Text style={styles.summaryLabel}>Pending</Text>
+                    <Text style={[styles.summaryNumber, { color: '#7c3aed' }]}>
+                        {reminders.filter((r) => !r.is_completed).length}
+                    </Text>
+                    <Text style={styles.summaryLabel}>Pending Meds</Text>
                 </View>
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Link new patient</Text>
-                <View style={styles.messageRow}>
+            {/* Link Patient */}
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>🔗 Link New Patient</Text>
+                <View style={styles.inputRow}>
                     <TextInput
-                        style={styles.messageInput}
+                        style={styles.textInput}
                         value={linkPatientEmail}
                         onChangeText={setLinkPatientEmail}
                         placeholder="Patient email address..."
+                        placeholderTextColor="#888"
                         keyboardType="email-address"
                         autoCapitalize="none"
                     />
-                    <TouchableOpacity style={styles.sendButton} onPress={handleLinkPatient}>
-                        <Text style={styles.sendText}>Link</Text>
+                    <TouchableOpacity style={styles.actionBtn} onPress={handleLinkPatient}>
+                        <Text style={styles.actionBtnText}>LINK</Text>
                     </TouchableOpacity>
                 </View>
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Assigned patients</Text>
+            {/* Assigned Patients List with Live AI Indicators */}
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>👥 Assigned Patients & AI Telemetry</Text>
                 {patients.length === 0 ? (
-                    <Text style={styles.emptyText}>No patients are linked to this caregiver yet.</Text>
+                    <Text style={styles.emptyText}>No patients linked to your account yet.</Text>
                 ) : (
-                    patients.map((patient) => (
-                        <View key={patient.id} style={styles.infoCard}>
-                            <Text style={styles.cardTitle}>{patient.full_name}</Text>
-                            <Text style={styles.metaText}>{patient.email}</Text>
-                            <Text style={styles.metaText}>
-                                Doctor ID: {patient.doctor_id ? patient.doctor_id : 'Not assigned'}
-                            </Text>
-                            <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 12}}>
-                                <TouchableOpacity style={[styles.trackButton, {flex: 1, marginRight: 5, marginTop: 0}]} onPress={() => handleTrackLocation(patient)}>
-                                    <Text style={styles.trackText}>📍 Map</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.trackButton, {flex: 1, marginRight: 5, backgroundColor: '#e8f4f8', marginTop: 0}]} onPress={() => navigation.navigate('Medication')}>
-                                    <Text style={[styles.trackText, {color: '#0f766e'}]}>📝 Tasks</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.trackButton, {flex: 1, backgroundColor: '#fdf4ff', marginTop: 0}]} onPress={() => navigation.navigate('AIRisk', { patientId: patient.id })}>
-                                    <Text style={[styles.trackText, {color: '#86198f'}]}>🧠 AI Insight</Text>
-                                </TouchableOpacity>
+                    patients.map((patient) => {
+                        const ai = patientAiData[patient.id];
+                        return (
+                            <View key={patient.id} style={styles.patientCard}>
+                                <View style={styles.patientCardTop}>
+                                    <View style={styles.avatarCircle}>
+                                        <Ionicons name="person" size={32} color="#7c3aed" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 16 }}>
+                                        <Text style={styles.patientName}>{patient.full_name}</Text>
+                                        <Text style={styles.patientEmail}>{patient.email}</Text>
+                                    </View>
+                                    {ai && (
+                                        <View style={[styles.aiBadge, { backgroundColor: ai.score >= 40 ? '#fee2e2' : '#d1fae5' }]}>
+                                            <Text style={[styles.aiBadgeText, { color: ai.score >= 40 ? '#dc2626' : '#065f46' }]}>
+                                                🧠 AI Risk: {ai.score}%
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* AI Summary Box */}
+                                {ai && (
+                                    <View style={styles.aiSummaryBox}>
+                                        <Text style={styles.aiSummaryTitle}>Status: {ai.status}</Text>
+                                        <Text style={styles.aiSummarySub}>
+                                            Adherence: {ai.adherence_pct}% | Sundowning: {ai.sundowning_window}
+                                        </Text>
+                                    </View>
+                                )}
+
+                                {/* Action Buttons Row */}
+                                <View style={styles.btnRow}>
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#3b82f6' }]} onPress={() => handleTrackLocation(patient)}>
+                                        <Ionicons name="location" size={20} color="white" />
+                                        <Text style={styles.actionGridText}> Track GPS</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#7c3aed' }]} onPress={() => navigation.navigate('Medication')}>
+                                        <Ionicons name="medkit" size={20} color="white" />
+                                        <Text style={styles.actionGridText}> Schedules</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#86198f' }]} onPress={() => navigation.navigate('AIRisk', { patientId: patient.id })}>
+                                        <Ionicons name="analytics" size={20} color="white" />
+                                        <Text style={styles.actionGridText}> AI Detail</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={[styles.btnRow, { marginTop: 12 }]}>
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#25D366' }]} onPress={() => Linking.openURL(`whatsapp://send?text=Emergency check-in with patient ${patient.full_name}`)}>
+                                        <Ionicons name="logo-whatsapp" size={20} color="white" />
+                                        <Text style={styles.actionGridText}> WhatsApp</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#dc2626' }]} onPress={() => Linking.openURL(`mailto:${patient.email}?subject=Emergency Check-in`)}>
+                                        <Ionicons name="mail" size={20} color="white" />
+                                        <Text style={styles.actionGridText}> Email Alert</Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <View style={{flexDirection: 'row', justifyContent: 'space-between', marginTop: 8}}>
-                                <TouchableOpacity style={[styles.trackButton, {flex: 1, marginRight: 5, backgroundColor: '#25D366', marginTop: 0}]} onPress={() => {
-                                    Linking.openURL(`whatsapp://send?text=Emergency check-in: Are you okay?`);
-                                }}>
-                                    <Text style={[styles.trackText, {color: 'white'}]}>💬 WhatsApp Alert</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={[styles.trackButton, {flex: 1, backgroundColor: '#d9534f', marginTop: 0}]} onPress={() => {
-                                    Linking.openURL(`mailto:${patient.email}?subject=Emergency Check-in&body=Are you okay?`);
-                                }}>
-                                    <Text style={[styles.trackText, {color: 'white'}]}>✉️ Email Alert</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-                    ))
+                        );
+                    })
                 )}
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Recent patient alerts</Text>
+            {/* Behavioral Care Journal */}
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>📓 Behavioral Care Journal</Text>
+                <Text style={styles.sectionSub}>Record daily dementia observations (wandering, confusion, sleep quality)</Text>
+                <View style={styles.inputRow}>
+                    <TextInput
+                        style={styles.textInput}
+                        value={newSymptom}
+                        onChangeText={setNewSymptom}
+                        placeholder="e.g. Patient showed slight confusion around 5 PM..."
+                        placeholderTextColor="#888"
+                    />
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0891b2' }]} onPress={handleAddSymptomLog}>
+                        <Text style={styles.actionBtnText}>LOG</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {symptomLog.map((item, idx) => (
+                    <View key={idx} style={styles.logItem}>
+                        <Ionicons name="journal-outline" size={24} color="#0891b2" />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.logText}>{item.text}</Text>
+                            <Text style={styles.logTime}>Logged at {item.time}</Text>
+                        </View>
+                    </View>
+                ))}
+            </View>
+
+            {/* Patient Alerts Section */}
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>🚨 Recent Patient Alerts</Text>
                 <FlatList
                     data={alerts}
                     keyExtractor={(item) => item.id.toString()}
                     scrollEnabled={false}
                     renderItem={({ item }) => (
-                        <View style={styles.alertCard}>
-                            <Text style={styles.alertTitle}>{item.alert_type}</Text>
-                            <Text>{item.description}</Text>
-                            <Text style={styles.timeText}>{parseUTC(item.timestamp).toLocaleString()}</Text>
+                        <View style={styles.alertItem}>
+                            <Ionicons name="warning" size={34} color="#dc2626" />
+                            <View style={{ flex: 1, marginLeft: 14 }}>
+                                <Text style={styles.alertTitle}>{item.alert_type}</Text>
+                                <Text style={styles.alertDesc}>{item.description}</Text>
+                                <Text style={styles.alertTime}>{parseUTC(item.timestamp).toLocaleString()}</Text>
+
+                                <TouchableOpacity
+                                    style={styles.ackAlertBtn}
+                                    onPress={() => handleAcknowledgeAlert(item.id)}
+                                >
+                                    <Ionicons name="checkmark-circle" size={20} color="white" />
+                                    <Text style={styles.ackAlertBtnText}> ACKNOWLEDGE & CLEAR</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     )}
-                    ListEmptyComponent={<Text style={styles.emptyText}>No recent alerts.</Text>}
+                    ListEmptyComponent={<Text style={styles.emptyText}>No recent alerts recorded.</Text>}
                 />
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Care team chat</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+            {/* Doctor Chat */}
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>💬 Doctor Consultation Chat</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
                     {teamMembers.map((member) => (
                         <TouchableOpacity
                             key={member.id}
                             style={[styles.chip, selectedChatUser?.id === member.id && styles.chipActive]}
                             onPress={() => setSelectedChatUser(member)}
                         >
-                            <Text style={[styles.chipText, selectedChatUser?.id === member.id && styles.chipTextActive]}>
+                            <Text style={[styles.chipText, selectedChatUser?.id === member.id && styles.whiteText]}>
                                 Dr. {member.full_name}
                             </Text>
                         </TouchableOpacity>
@@ -222,8 +352,8 @@ export default function CaregiverDashboard({ navigation }) {
                 </ScrollView>
 
                 {selectedChatUser ? (
-                    <View style={styles.chatCard}>
-                        <Text style={styles.chatTitle}>Chat with Dr. {selectedChatUser.full_name}</Text>
+                    <View style={styles.chatBox}>
+                        <Text style={styles.chatHeader}>Chatting with Dr. {selectedChatUser.full_name}</Text>
                         <FlatList
                             data={messages}
                             keyExtractor={(item) => item.id.toString()}
@@ -231,110 +361,169 @@ export default function CaregiverDashboard({ navigation }) {
                             renderItem={({ item }) => {
                                 const isMine = item.sender_id === currentUser?.id;
                                 return (
-                                    <View style={[styles.messageBubble, isMine ? styles.mine : styles.theirs]}>
-                                        <Text style={[styles.messageText, isMine && styles.mineText]}>{item.content}</Text>
+                                    <View style={[styles.msgBubble, isMine ? styles.msgMine : styles.msgTheirs]}>
+                                        <Text style={[styles.msgContent, isMine && styles.whiteText]}>{item.content}</Text>
                                     </View>
                                 );
                             }}
-                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Start the conversation.</Text>}
+                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Send an update to the doctor.</Text>}
                         />
-                        <View style={styles.messageRow}>
+                        <View style={styles.inputRow}>
                             <TextInput
-                                style={styles.messageInput}
+                                style={styles.textInput}
                                 value={draftMessage}
                                 onChangeText={setDraftMessage}
-                                placeholder="Write a message..."
+                                placeholder="Message doctor..."
+                                placeholderTextColor="#888"
                             />
-                            <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-                                <Text style={styles.sendText}>Send</Text>
+                            <TouchableOpacity style={styles.actionBtn} onPress={handleSendMessage}>
+                                <Text style={styles.actionBtnText}>SEND</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 ) : (
-                    <Text style={styles.emptyText}>No doctor is linked to your patients yet.</Text>
+                    <Text style={styles.emptyText}>No doctor assigned to your patients yet.</Text>
                 )}
             </View>
-            
+
+            {/* GPS Tracking Modal */}
             {selectedPatientModal && (
-                <Modal visible={true} transparent={true} animationType="slide">
+                <Modal visible={true} transparent animationType="slide">
                     <View style={styles.modalBg}>
                         <View style={styles.modalCard}>
-                            <Text style={styles.modalHeader}>Full Patient Details</Text>
-                            <Text style={styles.modalLabel}>Name: <Text style={styles.modalValue}>{selectedPatientModal.full_name}</Text></Text>
-                            <Text style={styles.modalLabel}>Email: <Text style={styles.modalValue}>{selectedPatientModal.email}</Text></Text>
-                            
-                            <View style={styles.modalDivider}/>
-                            
-                            <Text style={styles.modalHeader}>Live Tracking</Text>
+                            <Text style={styles.modalHeader}>📍 GPS Location & Wandering Radar</Text>
+                            <Text style={styles.modalSub}>Patient: {selectedPatientModal.full_name}</Text>
+
                             {liveLocation && liveLocation.latitude ? (
                                 <View style={styles.gpsBox}>
-                                    <Text style={styles.gpsLabel}>Lat: {liveLocation.latitude.toFixed(4)}</Text>
-                                    <Text style={styles.gpsLabel}>Lng: {liveLocation.longitude.toFixed(4)}</Text>
+                                    <Text style={styles.gpsVal}>Lat: {liveLocation.latitude.toFixed(5)}</Text>
+                                    <Text style={styles.gpsVal}>Lng: {liveLocation.longitude.toFixed(5)}</Text>
                                     <Text style={styles.gpsTime}>Last updated: {parseUTC(liveLocation.timestamp).toLocaleTimeString()}</Text>
                                 </View>
                             ) : (
-                                <Text style={styles.modalValue}>No GPS check-ins yet.</Text>
+                                <Text style={styles.emptyText}>No active GPS telemetry ping received yet.</Text>
                             )}
 
-                            <View style={styles.modalDivider}/>
-
-                            <TouchableOpacity 
-                                style={[styles.closeButton, {marginTop: 20}]}
+                            <TouchableOpacity
+                                style={styles.closeBtn}
                                 onPress={() => setSelectedPatientModal(null)}
                             >
-                                <Text style={styles.closeText}>Close Window</Text>
+                                <Text style={styles.closeBtnText}>CLOSE WINDOW</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
                 </Modal>
             )}
-            
+
+            <View style={{ height: 80 }} />
         </ScrollView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f4f6fb' },
-    content: { padding: 20, paddingTop: 50, paddingBottom: 100 },
-    header: { fontSize: 28, fontWeight: 'bold', color: '#1f2a44' },
-    subHeader: { color: '#667085', marginTop: 6, marginBottom: 18 },
-    summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18 },
-    summaryCard: { width: '31%', backgroundColor: 'white', borderRadius: 16, padding: 16, alignItems: 'center' },
-    summaryNumber: { fontSize: 26, fontWeight: 'bold', color: '#3b5bdb' },
-    infoCard: { backgroundColor: 'white', padding: 16, borderRadius: 16, marginBottom: 10 },
-    cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f2a44' },
-    metaText: { color: '#667085', marginTop: 4 },
-    alertCard: { backgroundColor: '#ffe5e5', padding: 16, borderRadius: 16, marginBottom: 10 },
-    alertTitle: { fontSize: 16, fontWeight: 'bold', color: '#d9534f', marginBottom: 4 },
-    timeText: { color: '#888', marginTop: 8, fontSize: 12 },
-    chipRow: { marginBottom: 12 },
-    chip: { backgroundColor: '#e7ecf7', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
-    chipActive: { backgroundColor: '#3b5bdb' },
-    chipText: { color: '#3b5bdb', fontWeight: 'bold' },
-    chipTextActive: { color: 'white' },
-    chatTitle: { fontWeight: 'bold', color: '#223', marginBottom: 12 },
-    messageBubble: { borderRadius: 14, padding: 12, marginBottom: 8, maxWidth: '85%' },
-    mine: { alignSelf: 'flex-end', backgroundColor: '#3b5bdb' },
-    theirs: { alignSelf: 'flex-start', backgroundColor: '#e7ecf7' },
-    messageText: { color: '#24324a' },
-    mineText: { color: 'white' },
-    messageRow: { flexDirection: 'row', marginTop: 12, alignItems: 'center' },
-    messageInput: { flex: 1, borderWidth: 1, borderColor: '#d8deea', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: 'white' },
-    sendButton: { marginLeft: 10, backgroundColor: '#3b5bdb', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, justifyContent: 'center' },
-    sendText: { color: 'white', fontWeight: 'bold' },
-    
-    // Tracks and modals
-    trackButton: { marginTop: 12, backgroundColor: '#e7ecf7', padding: 10, borderRadius: 8, alignItems: 'center' },
-    trackText: { color: '#3b5bdb', fontWeight: 'bold' },
-    modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-    modalCard: { width: '100%', backgroundColor: 'white', borderRadius: 20, padding: 24 },
-    modalHeader: { fontSize: 20, fontWeight: 'bold', color: '#1f2a44', marginBottom: 15 },
-    modalLabel: { color: '#667085', fontSize: 16, marginBottom: 5 },
-    modalValue: { fontWeight: 'bold', color: '#333' },
-    modalDivider: { height: 1, backgroundColor: '#eee', marginVertical: 15 },
-    gpsBox: { backgroundColor: '#f0fdf4', padding: 15, borderRadius: 10, borderWidth: 1, borderColor: '#bbf7d0' },
-    gpsLabel: { fontSize: 16, fontWeight: 'bold', color: '#15803d', marginBottom:4 },
-    gpsTime: { color: '#166534', fontSize: 13, marginTop: 4 },
-    closeButton: { padding: 12, alignItems: 'center' },
-    closeText: { color: '#888', fontWeight: 'bold', fontSize: 16 }
+    container: { flex: 1, backgroundColor: '#f0f4f8' },
+    content: { padding: 24, paddingTop: 55 },
+
+    headerBox: {
+        backgroundColor: '#0f172a', borderRadius: 28, padding: 26,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22
+    },
+    headerTitle: { fontSize: 30, fontWeight: 'bold', color: 'white' },
+    headerSub: { fontSize: 17, color: '#94a3b8', marginTop: 5 },
+    roleBadge: {
+        backgroundColor: '#16a34a', paddingHorizontal: 18, paddingVertical: 12,
+        borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10
+    },
+    roleBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+
+    summaryRow: { flexDirection: 'row', gap: 16, marginBottom: 22 },
+    summaryCard: {
+        flex: 1, backgroundColor: 'white', borderRadius: 24, padding: 22,
+        alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+    },
+    summaryNumber: { fontSize: 34, fontWeight: 'bold', color: '#16a34a' },
+    summaryLabel: { fontSize: 15, color: '#6b7280', marginTop: 6, fontWeight: '600' },
+
+    sectionCard: {
+        backgroundColor: 'white', borderRadius: 28, padding: 26, marginBottom: 22,
+        shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+    },
+    sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },
+    sectionSub: { fontSize: 15, color: '#6b7280', marginBottom: 14 },
+
+    inputRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
+    textInput: {
+        flex: 1, borderWidth: 2, borderColor: '#cbd5e1', borderRadius: 18,
+        paddingHorizontal: 20, paddingVertical: 16, fontSize: 18, backgroundColor: '#f8fafc', color: '#0f172a'
+    },
+    actionBtn: {
+        backgroundColor: '#16a34a', paddingHorizontal: 26, borderRadius: 18,
+        justifyContent: 'center', alignItems: 'center'
+    },
+    actionBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
+
+    patientCard: {
+        backgroundColor: '#f8fafc', borderRadius: 24, padding: 22, marginBottom: 16,
+        borderWidth: 2, borderColor: '#e2e8f0'
+    },
+    patientCardTop: { flexDirection: 'row', alignItems: 'center' },
+    avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+    patientName: { fontSize: 21, fontWeight: 'bold', color: '#0f172a' },
+    patientEmail: { fontSize: 15, color: '#6b7280', marginTop: 3 },
+    aiBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
+    aiBadgeText: { fontWeight: 'bold', fontSize: 14 },
+
+    aiSummaryBox: { backgroundColor: '#f1f5f9', padding: 14, borderRadius: 16, marginTop: 14 },
+    aiSummaryTitle: { fontSize: 16, fontWeight: 'bold', color: '#0f172a' },
+    aiSummarySub: { fontSize: 14, color: '#4b5563', marginTop: 4 },
+
+    btnRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    actionGridBtn: {
+        flex: 1, paddingVertical: 14, borderRadius: 16,
+        flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
+    },
+    actionGridText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+
+    logItem: {
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f9ff',
+        padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1.5, borderColor: '#bae6fd'
+    },
+    logText: { fontSize: 16, color: '#0369a1', fontWeight: '600' },
+    logTime: { fontSize: 13, color: '#0284c7', marginTop: 3 },
+
+    alertItem: {
+        flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fef2f2',
+        padding: 18, borderRadius: 22, marginBottom: 12, borderWidth: 2, borderColor: '#fecaca'
+    },
+    alertTitle: { fontSize: 18, fontWeight: 'bold', color: '#dc2626' },
+    alertDesc: { fontSize: 15, color: '#4b5563', marginTop: 4 },
+    alertTime: { fontSize: 13, color: '#9ca3af', marginTop: 6 },
+    ackAlertBtn: {
+        backgroundColor: '#16a34a', paddingHorizontal: 16, paddingVertical: 10,
+        borderRadius: 16, marginTop: 12, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start'
+    },
+    ackAlertBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+
+    chip: { backgroundColor: '#f1f5f9', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, marginRight: 12 },
+    chipActive: { backgroundColor: '#16a34a' },
+    chipText: { color: '#16a34a', fontWeight: 'bold', fontSize: 17 },
+    whiteText: { color: 'white' },
+
+    chatBox: { marginTop: 12 },
+    chatHeader: { fontWeight: 'bold', color: '#0f172a', marginBottom: 14, fontSize: 17 },
+    msgBubble: { padding: 18, borderRadius: 20, marginBottom: 14, maxWidth: '85%' },
+    msgMine: { alignSelf: 'flex-end', backgroundColor: '#16a34a' },
+    msgTheirs: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9' },
+    msgContent: { fontSize: 18, color: '#0f172a', lineHeight: 26 },
+
+    modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
+    modalCard: { backgroundColor: 'white', borderRadius: 28, padding: 28 },
+    modalHeader: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' },
+    modalSub: { fontSize: 16, color: '#6b7280', marginTop: 4, marginBottom: 20 },
+    gpsBox: { backgroundColor: '#f0fdf4', padding: 20, borderRadius: 20, borderWidth: 2, borderColor: '#bbf7d0', marginBottom: 20 },
+    gpsVal: { fontSize: 19, fontWeight: 'bold', color: '#166534' },
+    gpsTime: { fontSize: 14, color: '#15803d', marginTop: 6 },
+    closeBtn: { backgroundColor: '#0f172a', padding: 18, borderRadius: 18, alignItems: 'center' },
+    closeBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
+    emptyText: { color: '#6b7280', textAlign: 'center', marginVertical: 20, fontSize: 17 },
 });

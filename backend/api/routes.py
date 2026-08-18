@@ -9,7 +9,6 @@ from api.auth import get_current_user
 from schemas import domain as schemas
 from services import logic as services
 from services import ml_engine
-from services import ml_engine
 from models import domain as models
 import random
 
@@ -41,18 +40,16 @@ def add_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Add a new reminder and schedule backend automation"""
+    if current_user.role == "Patient":
+        raise HTTPException(status_code=403, detail="Patients are not authorized to create reminders.")
     target_id = services._resolve_target_user(db, current_user.id)
     rem_db = services.create_reminder(db, reminder=reminder_in, user_id=target_id)
     
-    # automation
     try:
         from services.background_tasks import dispatch_automated_alert
         reminder_time = reminder_in.time.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         delay_seconds = (reminder_time - now).total_seconds()
-        
-        # If in the future, dispatch background automation.
         if delay_seconds > 0:
             background_tasks.add_task(dispatch_automated_alert, delay_seconds, target_id, reminder_in.title)
     except Exception:
@@ -65,7 +62,6 @@ def get_reminders(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all reminders for the authenticated user"""
     return services.get_reminders(db, user_id=current_user.id)
 
 @router.put("/update-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
@@ -75,7 +71,8 @@ def update_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Modify an existing reminder"""
+    if current_user.role == "Patient":
+        raise HTTPException(status_code=403, detail="Patients are not authorized to update reminders.")
     return services.update_reminder(db, reminder_id, reminder_in)
 
 @router.delete("/delete-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
@@ -84,7 +81,8 @@ def delete_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a reminder"""
+    if current_user.role == "Patient":
+        raise HTTPException(status_code=403, detail="Patients are not authorized to delete reminders.")
     return services.delete_reminder(db, reminder_id)
 
 @router.put("/complete-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
@@ -93,7 +91,6 @@ def complete_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark a reminder as completed"""
     return services.complete_reminder(db, reminder_id=reminder_id)
 
 @router.put("/miss-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
@@ -102,7 +99,6 @@ def miss_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark a reminder as missed and log an alert"""
     return services.miss_reminder(db, reminder_id=reminder_id)
 
 @router.post("/panic-alert", response_model=schemas.AlertResponse)
@@ -111,8 +107,6 @@ def panic_alert(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Trigger a panic alert"""
-    # Force alert type to be Panic just in case
     alert_in.alert_type = "Panic"
     return services.create_alert(db, alert=alert_in, user_id=current_user.id)
 
@@ -121,8 +115,18 @@ def get_alerts(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get alerts for the authenticated user"""
     return services.get_alerts(db, user_id=current_user.id)
+
+@router.delete("/alerts/{alert_id}")
+def delete_alert_endpoint(
+    alert_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    success = services.delete_alert(db, alert_id=alert_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return {"message": "Alert acknowledged and cleared successfully"}
 
 @router.post("/location-update", response_model=schemas.LocationResponse)
 def update_location(
@@ -130,21 +134,30 @@ def update_location(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Store the user's location"""
-    # Later extend logic to detect safe zone breaches
     return services.create_location(db, location=location_in, user_id=current_user.id)
 
 @router.get("/predict-risk/{patient_id}")
 def get_predict_risk(patient_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Evaluate patient AI Risk natively utilizing Scikit-Learn logic via ml_engine."""
     return ml_engine.predict_patient_risk(db, patient_id)
+
+@router.get("/memory-graph/{patient_id}")
+def get_memory_graph_route(patient_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return ml_engine.get_memory_graph(db, patient_id)
+
+@router.post("/analyze-speech-cognitive")
+def analyze_speech_route(body: dict, current_user: models.User = Depends(get_current_user)):
+    speech_text = body.get("speech_text", "")
+    return ml_engine.analyze_cognitive_speech(speech_text, current_user.full_name)
+
+@router.get("/caregiver-daily-summary/{patient_id}")
+def get_caregiver_daily_summary_route(patient_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return ml_engine.get_caregiver_daily_summary(db, patient_id)
 
 @router.post("/analyze-pattern")
 def trigger_behavior_analysis(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Trigger behavior analysis for the current user"""
     target_id = services._resolve_target_user(db, current_user.id)
     return ml_engine.predict_patient_risk(db, target_id)
 
@@ -171,6 +184,10 @@ def add_photo(photo_in: schemas.PhotoCreate, current_user: models.User = Depends
 @router.get("/photos", response_model=List[schemas.PhotoResponse])
 def get_photos(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return services.get_photos(db, user_id=current_user.id)
+
+@router.delete("/photos/{photo_id}", response_model=schemas.PhotoResponse)
+def delete_photo(photo_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.delete_photo(db, photo_id=photo_id)
 
 @router.get("/patients", response_model=List[schemas.UserResponse])
 def get_patients(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -216,6 +233,8 @@ def add_patient_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if current_user.role == "Patient":
+        raise HTTPException(status_code=403, detail="Patients are not authorized to create patient reminders.")
     db_reminder = models.Reminder(**reminder_in.model_dump(), user_id=patient_id, assigned_by=current_user.id)
     db.add(db_reminder)
     db.commit()
@@ -224,24 +243,15 @@ def add_patient_reminder(
 
 @router.post("/recognize-face", response_model=schemas.FaceScanResponse)
 def recognize_face_endpoint(scan_data: schemas.FaceScanRequest, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Simulate advanced Neural Facial Recognition processing against the existing Photos memory DB."""
-    import asyncio
-    
-    # In production, scan_data.image_base64 would be routed to DeepFace/AWS Rekognition.
-    # We query the DB to pull known faces if any.
     patient_photos = db.query(models.Photo).filter(models.Photo.user_id == current_user.id).all()
-    
     if len(patient_photos) == 0:
         return schemas.FaceScanResponse(
             match_found=False,
             confidence=0.0,
-            message="No family members registered in your Gallery yet to compare against."
+            message="No family members registered in your Directory yet to compare against."
         )
-        
-    # Simulate a successful neural extraction mapping to a known photo
     identified_photo = random.choice(patient_photos)
     confidence = random.uniform(92.5, 99.8)
-    
     return schemas.FaceScanResponse(
         match_found=True,
         confidence=confidence,

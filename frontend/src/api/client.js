@@ -1,8 +1,10 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-// Set to your exact Local Network IPv4 address so the physical device can connect.
-const API_URL = 'http://192.168.30.90:8000/api/v1'; 
+const API_URL = Platform.OS === 'web' 
+    ? 'http://localhost:8000/api/v1' 
+    : 'http://10.201.0.156:8000/api/v1'; 
 
 const client = axios.create({
     baseURL: API_URL,
@@ -11,15 +13,46 @@ const client = axios.create({
     },
 });
 
-// Add interceptor to include token
 let memoryToken = null;
 
-client.interceptors.request.use(async (config) => {
-    let token = memoryToken;
-    if (!token) {
-        token = await SecureStore.getItemAsync('userToken');
-        memoryToken = token;
+const storeToken = async (token) => {
+    memoryToken = token;
+    if (Platform.OS === 'web') {
+        localStorage.setItem('userToken', token);
+    } else {
+        await SecureStore.setItemAsync('userToken', token);
     }
+};
+
+const getToken = async () => {
+    if (memoryToken) return memoryToken;
+    if (Platform.OS === 'web') {
+        memoryToken = localStorage.getItem('userToken');
+    } else {
+        try {
+            memoryToken = await SecureStore.getItemAsync('userToken');
+        } catch (e) {
+            console.log("SecureStore Error:", e);
+        }
+    }
+    return memoryToken;
+};
+
+const removeToken = async () => {
+    memoryToken = null;
+    if (Platform.OS === 'web') {
+        localStorage.removeItem('userToken');
+    } else {
+        try {
+            await SecureStore.deleteItemAsync('userToken');
+        } catch (e) {
+            console.log("SecureStore Error:", e);
+        }
+    }
+};
+
+client.interceptors.request.use(async (config) => {
+    let token = await getToken();
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -34,8 +67,7 @@ export const login = async (username, password) => {
     const response = await client.post('/login', formData.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
-    memoryToken = response.data.access_token;
-    await SecureStore.setItemAsync('userToken', response.data.access_token);
+    await storeToken(response.data.access_token);
     return response.data;
 };
 
@@ -60,8 +92,7 @@ export const getUserById = async (userId) => {
 };
 
 export const logout = async () => {
-    memoryToken = null;
-    await SecureStore.deleteItemAsync('userToken');
+    await removeToken();
 };
 
 export const fetchReminders = async () => {
@@ -71,6 +102,11 @@ export const fetchReminders = async () => {
 
 export const fetchAlerts = async () => {
     const response = await client.get('/alerts');
+    return response.data;
+};
+
+export const deleteAlert = async (alertId) => {
+    const response = await client.delete(`/alerts/${alertId}`);
     return response.data;
 };
 
@@ -84,6 +120,21 @@ export const triggerPanicAlert = async () => {
 
 export const predictRisk = async (patientId) => {
     const response = await client.get(`/predict-risk/${patientId}`);
+    return response.data;
+};
+
+export const fetchMemoryGraph = async (patientId) => {
+    const response = await client.get(`/memory-graph/${patientId}`);
+    return response.data;
+};
+
+export const analyzeSpeechCognitive = async (speechText) => {
+    const response = await client.post('/analyze-speech-cognitive', { speech_text: speechText });
+    return response.data;
+};
+
+export const fetchCaregiverDailySummary = async (patientId) => {
+    const response = await client.get(`/caregiver-daily-summary/${patientId}`);
     return response.data;
 };
 
@@ -111,16 +162,11 @@ export const deleteReminder = async (reminderId) => {
     return response.data;
 };
 
-
-
 export const missReminder = async (reminderId) => {
     const response = await client.put(`/miss-reminder/${reminderId}`);
     return response.data;
 };
 
-// =======================
-// ML Face Extraction
-// =======================
 export const scanFace = async (base64Image) => {
     const response = await client.post('/recognize-face', {
         image_base64: base64Image
@@ -173,6 +219,11 @@ export const fetchPhotos = async () => {
 
 export const addPhoto = async (title, url) => {
     const res = await client.post('/photos', { title, description: "", image_url: url });
+    return res.data;
+};
+
+export const deletePhoto = async (photoId) => {
+    const res = await client.delete(`/photos/${photoId}`);
     return res.data;
 };
 

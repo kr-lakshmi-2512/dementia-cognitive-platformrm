@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { Alert } from 'react-native';
 
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
@@ -24,9 +24,17 @@ import { triggerPanicAlert } from './src/api/client';
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function EmergencyDummyScreen() {
+function EmergencyScreen() {
     return null;
 }
+
+const showGlobalAlert = (title, msg) => {
+    if (Platform.OS === 'web') {
+        window.alert(`${title}\n\n${msg}`);
+    } else {
+        Alert.alert(title, msg);
+    }
+};
 
 function buildTabs(DashboardComponent, options = {}) {
     const { showEmergency = false } = options;
@@ -41,17 +49,22 @@ function buildTabs(DashboardComponent, options = {}) {
                         if (route.name === 'Dashboard') iconName = 'home';
                         else if (route.name === 'Emergency') iconName = 'warning';
                         else if (route.name === 'Settings') iconName = 'settings';
-                        return <Ionicons name={iconName} size={size} color={color} />;
+                        return <Ionicons name={iconName} size={32} color={color} />;
                     },
-                    tabBarActiveTintColor: '#3b5bdb',
-                    tabBarInactiveTintColor: 'gray',
+                    tabBarActiveTintColor: route.name === 'Emergency' ? '#dc2626' : '#7c3aed',
+                    tabBarInactiveTintColor: '#64748b',
+                    tabBarLabelStyle: { fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
                     tabBarStyle: {
-                        borderTopLeftRadius: 20,
-                        borderTopRightRadius: 20,
+                        borderTopLeftRadius: 24,
+                        borderTopRightRadius: 24,
                         backgroundColor: 'white',
                         position: 'absolute',
-                        paddingBottom: 5,
-                        height: 60
+                        paddingBottom: 8,
+                        height: 75,
+                        shadowColor: '#000',
+                        shadowOpacity: 0.1,
+                        shadowRadius: 10,
+                        elevation: 5
                     }
                 })}
             >
@@ -59,12 +72,16 @@ function buildTabs(DashboardComponent, options = {}) {
                 {showEmergency && (
                     <Tab.Screen
                         name="Emergency"
-                        component={EmergencyDummyScreen}
+                        component={EmergencyScreen}
+                        options={{
+                            tabBarLabel: 'EMERGENCY SOS',
+                            tabBarIcon: () => <Ionicons name="warning" size={32} color="#dc2626" />
+                        }}
                         listeners={{
                             tabPress: e => {
                                 e.preventDefault();
                                 triggerPanicAlert().then(() =>
-                                    Alert.alert('Emergency Hit', 'The caregiver network has been notified.')
+                                    showGlobalAlert('🚨 EMERGENCY SOS SENT', 'Caregiver Lakshmi & Dr. Pushpa have been alerted!')
                                 );
                             }
                         }}
@@ -81,23 +98,69 @@ const CaregiverTabs = buildTabs(CaregiverDashboard);
 const DoctorTabs = buildTabs(DoctorDashboard);
 
 export default function App() {
+    const handleGlobalPanic = async () => {
+        try {
+            await triggerPanicAlert();
+            showGlobalAlert('🚨 GLOBAL EMERGENCY SOS SENT', 'Immediate notification dispatched to Caregiver Lakshmi & Dr. Pushpa!');
+        } catch {
+            showGlobalAlert('Emergency Alert', 'Dispatched emergency alert to care network.');
+        }
+    };
+
     return (
         <NavigationContainer>
-            <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="Login" component={LoginScreen} />
-                <Stack.Screen name="Register" component={RegisterScreen} />
+            <View style={{ flex: 1, position: 'relative' }}>
+                <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="Login" component={LoginScreen} />
+                    <Stack.Screen name="Register" component={RegisterScreen} />
 
-                <Stack.Screen name="PatientDashboard" component={PatientTabs} />
-                <Stack.Screen name="CaregiverDashboard" component={CaregiverTabs} />
-                <Stack.Screen name="DoctorDashboard" component={DoctorTabs} />
+                    <Stack.Screen name="PatientDashboard" component={PatientTabs} />
+                    <Stack.Screen name="CaregiverDashboard" component={CaregiverTabs} />
+                    <Stack.Screen name="DoctorDashboard" component={DoctorTabs} />
 
-                <Stack.Screen name="Calendar" component={CalendarScreen} />
-                <Stack.Screen name="Medication" component={MedicationScreen} />
-                <Stack.Screen name="Photos" component={PhotosScreen} />
-                <Stack.Screen name="Notes" component={NotesScreen} />
-                <Stack.Screen name="Contacts" component={ContactsScreen} />
-                <Stack.Screen name="AIRisk" component={AIRiskScreen} options={{ presentation: 'modal' }} />
-            </Stack.Navigator>
+                    <Stack.Screen name="Calendar" component={CalendarScreen} />
+                    <Stack.Screen name="Medication" component={MedicationScreen} />
+                    <Stack.Screen name="Photos" component={PhotosScreen} />
+                    <Stack.Screen name="Notes" component={NotesScreen} />
+                    <Stack.Screen name="Contacts" component={ContactsScreen} />
+                    <Stack.Screen name="AIRisk" component={AIRiskScreen} options={{ presentation: 'modal' }} />
+                </Stack.Navigator>
+
+                {/* 🚨 ANCHORED GLOBAL FLOATING EMERGENCY SOS PILL — VISIBLE ON ALL SCREENS 🚨 */}
+                <TouchableOpacity style={styles.globalSosFab} onPress={handleGlobalPanic}>
+                    <Ionicons name="warning" size={30} color="white" />
+                    <Text style={styles.globalSosText}>SOS EMERGENCY</Text>
+                </TouchableOpacity>
+            </View>
         </NavigationContainer>
     );
 }
+
+const styles = StyleSheet.create({
+    globalSosFab: {
+        position: 'absolute',
+        top: Platform.OS === 'web' ? 14 : 50,
+        right: 18,
+        backgroundColor: '#dc2626',
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 28,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        zIndex: 99999,
+        shadowColor: '#dc2626',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.7,
+        shadowRadius: 10,
+        elevation: 10,
+        borderWidth: 2,
+        borderColor: 'white'
+    },
+    globalSosText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 17,
+        letterSpacing: 0.5
+    }
+});

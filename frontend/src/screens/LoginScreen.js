@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { login, getUserRole } from '../api/client';
+
+const showGlobalAlert = (title, msg) => {
+    if (Platform.OS === 'web') {
+        window.alert(`${title}\n\n${msg}`);
+    } else {
+        Alert.alert(title, msg);
+    }
+};
 
 export default function LoginScreen({ navigation }) {
     const [email, setEmail] = useState('');
@@ -12,7 +20,7 @@ export default function LoginScreen({ navigation }) {
             await login(email, password);
             const user = await getUserRole();
             
-            Alert.alert(`Welcome back, ${user.full_name}!`);
+            showGlobalAlert('✅ Welcome!', `Welcome back, ${user.full_name}!`);
             
             if (user.role === 'Caregiver') {
                 navigation.replace('CaregiverDashboard');
@@ -22,12 +30,12 @@ export default function LoginScreen({ navigation }) {
                 navigation.replace('PatientDashboard');
             }
         } catch (error) {
-            Alert.alert('Login Failed', error.response?.data?.detail || 'Invalid email or password');
+            showGlobalAlert('Login Failed', error.response?.data?.detail || 'Invalid email or password');
         }
     };
 
     return (
-        <LinearGradient colors={['#3b185f', '#1a0b2e']} style={styles.container}>
+        <LinearGradient colors={['#1e1b4b', '#0f172a']} style={styles.container}>
             <View style={styles.card}>
                 <View style={styles.logoContainer}>
                     <Image 
@@ -35,32 +43,37 @@ export default function LoginScreen({ navigation }) {
                         style={styles.logo} 
                     />
                 </View>
-                <Text style={styles.title}>DementiaCare</Text>
-                <Text style={styles.subtitle}>your everyday buddy</Text>
+                <Text style={styles.title}>DementiaCare Platform</Text>
+                <Text style={styles.subtitle}>Memory Companion & Care Network</Text>
                 
                 <View style={styles.formContainer}>
+                    <Text style={styles.inputLabel}>Email Address</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="Email"
+                        placeholder="Enter email address..."
+                        placeholderTextColor="#888"
                         value={email}
                         onChangeText={setEmail}
                         keyboardType="email-address"
                         autoCapitalize="none"
                     />
+
+                    <Text style={styles.inputLabel}>Password</Text>
                     <TextInput
                         style={styles.input}
-                        placeholder="Password"
+                        placeholder="Enter password..."
+                        placeholderTextColor="#888"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry
                     />
                     
                     <TouchableOpacity style={styles.primaryButton} onPress={handleLogin}>
-                        <Text style={styles.primaryButtonText}>LOGIN</Text>
+                        <Text style={styles.primaryButtonText}>LOG IN</Text>
                     </TouchableOpacity>
                     
                     <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Register')}>
-                        <Text style={styles.secondaryButtonText}>SIGN UP</Text>
+                        <Text style={styles.secondaryButtonText}>CREATE NEW ACCOUNT</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -69,16 +82,23 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    card: { width: '85%', backgroundColor: 'white', borderRadius: 30, padding: 30, alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
-    logoContainer: { width: 100, height: 100, backgroundColor: '#f0f4ff', borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-    logo: { width: 60, height: 60 },
-    title: { fontSize: 24, fontWeight: 'bold', color: '#333' },
-    subtitle: { fontSize: 13, color: '#888', marginBottom: 30 },
+    container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+    card: {
+        width: '90%', maxWidth: 520, backgroundColor: 'white', borderRadius: 32,
+        padding: 36, alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 12}, shadowOpacity: 0.3, shadowRadius: 24, elevation: 12
+    },
+    logoContainer: { width: 110, height: 110, backgroundColor: '#f0f4ff', borderRadius: 55, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+    logo: { width: 70, height: 70 },
+    title: { fontSize: 34, fontWeight: 'bold', color: '#1e1b4b', textAlign: 'center' },
+    subtitle: { fontSize: 18, color: '#7c3aed', marginBottom: 32, fontWeight: '600', textAlign: 'center', marginTop: 4 },
     formContainer: { width: '100%' },
-    input: { height: 50, backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#eee', marginBottom: 15, paddingHorizontal: 15, borderRadius: 10 },
-    primaryButton: { backgroundColor: '#3b5bdb', padding: 15, borderRadius: 10, alignItems: 'center', marginBottom: 15 },
-    primaryButtonText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-    secondaryButton: { backgroundColor: 'white', borderWidth: 1, borderColor: '#ccc', padding: 15, borderRadius: 10, alignItems: 'center' },
-    secondaryButtonText: { color: '#3b5bdb', fontWeight: 'bold', fontSize: 16 }
+    inputLabel: { fontSize: 18, fontWeight: 'bold', color: '#1e1b4b', marginBottom: 8 },
+    input: {
+        height: 60, backgroundColor: '#f8fafc', borderWidth: 2, borderColor: '#cbd5e1',
+        marginBottom: 20, paddingHorizontal: 20, borderRadius: 18, fontSize: 20, color: '#1e1b4b'
+    },
+    primaryButton: { backgroundColor: '#7c3aed', paddingVertical: 18, borderRadius: 18, alignItems: 'center', marginBottom: 16, marginTop: 10 },
+    primaryButtonText: { color: 'white', fontWeight: 'bold', fontSize: 20, letterSpacing: 0.5 },
+    secondaryButton: { backgroundColor: '#f1f5f9', borderWidth: 2, borderColor: '#cbd5e1', paddingVertical: 18, borderRadius: 18, alignItems: 'center' },
+    secondaryButtonText: { color: '#1e1b4b', fontWeight: 'bold', fontSize: 18 }
 });

@@ -112,3 +112,6 @@ class BehaviorLog(Base):
     timestamp = Column(DateTime, default=func.now())
     
     user = relationship("User")
+
+# Alias for backward compatibility
+LocationLog = Location

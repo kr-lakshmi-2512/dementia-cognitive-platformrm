@@ -103,6 +103,14 @@ def get_alerts(db: Session, user_id: int):
         return db.query(models.Alert).all()
     return db.query(models.Alert).filter(models.Alert.user_id == user_id).all()
 
+def delete_alert(db: Session, alert_id: int):
+    alert = db.query(models.Alert).filter(models.Alert.id == alert_id).first()
+    if alert:
+        db.delete(alert)
+        db.commit()
+        return True
+    return False
+
 def create_location(db: Session, location: schemas.LocationCreate, user_id: int):
     db_location = models.Location(**location.model_dump(), user_id=user_id)
     db.add(db_location)
@@ -145,6 +153,13 @@ def create_photo(db: Session, photo: schemas.PhotoCreate, user_id: int):
 def get_photos(db: Session, user_id: int):
     target_id = _resolve_target_user(db, user_id)
     return db.query(models.Photo).filter(models.Photo.user_id == target_id).all()
+
+def delete_photo(db: Session, photo_id: int):
+    photo = db.query(models.Photo).filter(models.Photo.id == photo_id).first()
+    if photo:
+        db.delete(photo)
+        db.commit()
+    return photo
 
 # --- New Logic ---
 
