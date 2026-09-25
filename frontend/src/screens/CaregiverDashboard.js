@@ -428,102 +428,102 @@ const styles = StyleSheet.create({
         backgroundColor: '#0f172a', borderRadius: 28, padding: 26,
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22
     },
-    headerTitle: { fontSize: 30, fontWeight: 'bold', color: 'white' },
-    headerSub: { fontSize: 17, color: '#94a3b8', marginTop: 5 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
+    headerSub: { fontSize: 13, color: '#94a3b8', marginTop: 4 },
     roleBadge: {
-        backgroundColor: '#16a34a', paddingHorizontal: 18, paddingVertical: 12,
-        borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10
+        backgroundColor: '#16a34a', paddingHorizontal: 12, paddingVertical: 8,
+        borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6
     },
-    roleBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+    roleBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
-    summaryRow: { flexDirection: 'row', gap: 16, marginBottom: 22 },
+    summaryRow: { flexDirection: 'row', gap: 12, marginBottom: 18 },
     summaryCard: {
-        flex: 1, backgroundColor: 'white', borderRadius: 24, padding: 22,
-        alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+        flex: 1, backgroundColor: 'white', borderRadius: 18, padding: 16,
+        alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, elevation: 3
     },
-    summaryNumber: { fontSize: 34, fontWeight: 'bold', color: '#16a34a' },
-    summaryLabel: { fontSize: 15, color: '#6b7280', marginTop: 6, fontWeight: '600' },
+    summaryNumber: { fontSize: 24, fontWeight: 'bold', color: '#16a34a' },
+    summaryLabel: { fontSize: 12, color: '#6b7280', marginTop: 4, fontWeight: '600' },
 
     sectionCard: {
-        backgroundColor: 'white', borderRadius: 28, padding: 26, marginBottom: 22,
-        shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+        backgroundColor: 'white', borderRadius: 20, padding: 18, marginBottom: 18,
+        shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, elevation: 3
     },
-    sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },
-    sectionSub: { fontSize: 15, color: '#6b7280', marginBottom: 14 },
+    sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#0f172a', marginBottom: 4 },
+    sectionSub: { fontSize: 12, color: '#6b7280', marginBottom: 12 },
 
-    inputRow: { flexDirection: 'row', gap: 12, marginTop: 6 },
+    inputRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
     textInput: {
-        flex: 1, borderWidth: 2, borderColor: '#cbd5e1', borderRadius: 18,
-        paddingHorizontal: 20, paddingVertical: 16, fontSize: 18, backgroundColor: '#f8fafc', color: '#0f172a'
+        flex: 1, borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 14,
+        paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, backgroundColor: '#f8fafc', color: '#0f172a'
     },
     actionBtn: {
-        backgroundColor: '#16a34a', paddingHorizontal: 26, borderRadius: 18,
+        backgroundColor: '#16a34a', paddingHorizontal: 18, borderRadius: 14,
         justifyContent: 'center', alignItems: 'center'
     },
-    actionBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
+    actionBtnText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
 
     patientCard: {
-        backgroundColor: '#f8fafc', borderRadius: 24, padding: 22, marginBottom: 16,
-        borderWidth: 2, borderColor: '#e2e8f0'
+        backgroundColor: '#f8fafc', borderRadius: 18, padding: 16, marginBottom: 14,
+        borderWidth: 1.5, borderColor: '#e2e8f0'
     },
     patientCardTop: { flexDirection: 'row', alignItems: 'center' },
-    avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
-    patientName: { fontSize: 21, fontWeight: 'bold', color: '#0f172a' },
-    patientEmail: { fontSize: 15, color: '#6b7280', marginTop: 3 },
-    aiBadge: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-    aiBadgeText: { fontWeight: 'bold', fontSize: 14 },
+    avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+    patientName: { fontSize: 16, fontWeight: 'bold', color: '#0f172a' },
+    patientEmail: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+    aiBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+    aiBadgeText: { fontWeight: 'bold', fontSize: 11 },
 
-    aiSummaryBox: { backgroundColor: '#f1f5f9', padding: 14, borderRadius: 16, marginTop: 14 },
-    aiSummaryTitle: { fontSize: 16, fontWeight: 'bold', color: '#0f172a' },
-    aiSummarySub: { fontSize: 14, color: '#4b5563', marginTop: 4 },
+    aiSummaryBox: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 14, marginTop: 10 },
+    aiSummaryTitle: { fontSize: 13, fontWeight: 'bold', color: '#0f172a' },
+    aiSummarySub: { fontSize: 12, color: '#4b5563', marginTop: 3 },
 
-    btnRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    btnRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
     actionGridBtn: {
-        flex: 1, paddingVertical: 14, borderRadius: 16,
+        flex: 1, paddingVertical: 10, borderRadius: 14,
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
     },
-    actionGridText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+    actionGridText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
 
     logItem: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f9ff',
-        padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1.5, borderColor: '#bae6fd'
+        padding: 12, borderRadius: 14, marginTop: 10, borderWidth: 1, borderColor: '#bae6fd'
     },
-    logText: { fontSize: 16, color: '#0369a1', fontWeight: '600' },
-    logTime: { fontSize: 13, color: '#0284c7', marginTop: 3 },
+    logText: { fontSize: 13, color: '#0369a1', fontWeight: '600' },
+    logTime: { fontSize: 11, color: '#0284c7', marginTop: 2 },
 
     alertItem: {
         flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#fef2f2',
-        padding: 18, borderRadius: 22, marginBottom: 12, borderWidth: 2, borderColor: '#fecaca'
+        padding: 14, borderRadius: 16, marginBottom: 10, borderWidth: 1.5, borderColor: '#fecaca'
     },
-    alertTitle: { fontSize: 18, fontWeight: 'bold', color: '#dc2626' },
-    alertDesc: { fontSize: 15, color: '#4b5563', marginTop: 4 },
-    alertTime: { fontSize: 13, color: '#9ca3af', marginTop: 6 },
+    alertTitle: { fontSize: 14, fontWeight: 'bold', color: '#dc2626' },
+    alertDesc: { fontSize: 12, color: '#4b5563', marginTop: 3 },
+    alertTime: { fontSize: 11, color: '#9ca3af', marginTop: 4 },
     ackAlertBtn: {
-        backgroundColor: '#16a34a', paddingHorizontal: 16, paddingVertical: 10,
-        borderRadius: 16, marginTop: 12, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start'
+        backgroundColor: '#16a34a', paddingHorizontal: 14, paddingVertical: 8,
+        borderRadius: 12, marginTop: 10, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start'
     },
-    ackAlertBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+    ackAlertBtnText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
-    chip: { backgroundColor: '#f1f5f9', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 20, marginRight: 12 },
+    chip: { backgroundColor: '#f1f5f9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, marginRight: 8 },
     chipActive: { backgroundColor: '#16a34a' },
-    chipText: { color: '#16a34a', fontWeight: 'bold', fontSize: 17 },
+    chipText: { color: '#16a34a', fontWeight: 'bold', fontSize: 13 },
     whiteText: { color: 'white' },
 
-    chatBox: { marginTop: 12 },
-    chatHeader: { fontWeight: 'bold', color: '#0f172a', marginBottom: 14, fontSize: 17 },
-    msgBubble: { padding: 18, borderRadius: 20, marginBottom: 14, maxWidth: '85%' },
+    chatBox: { marginTop: 10 },
+    chatHeader: { fontWeight: 'bold', color: '#0f172a', marginBottom: 10, fontSize: 13 },
+    msgBubble: { padding: 12, borderRadius: 14, marginBottom: 10, maxWidth: '85%' },
     msgMine: { alignSelf: 'flex-end', backgroundColor: '#16a34a' },
     msgTheirs: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9' },
-    msgContent: { fontSize: 18, color: '#0f172a', lineHeight: 26 },
+    msgContent: { fontSize: 13, color: '#0f172a', lineHeight: 18 },
 
-    modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
-    modalCard: { backgroundColor: 'white', borderRadius: 28, padding: 28 },
-    modalHeader: { fontSize: 24, fontWeight: 'bold', color: '#0f172a' },
-    modalSub: { fontSize: 16, color: '#6b7280', marginTop: 4, marginBottom: 20 },
-    gpsBox: { backgroundColor: '#f0fdf4', padding: 20, borderRadius: 20, borderWidth: 2, borderColor: '#bbf7d0', marginBottom: 20 },
-    gpsVal: { fontSize: 19, fontWeight: 'bold', color: '#166534' },
-    gpsTime: { fontSize: 14, color: '#15803d', marginTop: 6 },
-    closeBtn: { backgroundColor: '#0f172a', padding: 18, borderRadius: 18, alignItems: 'center' },
-    closeBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
-    emptyText: { color: '#6b7280', textAlign: 'center', marginVertical: 20, fontSize: 17 },
+    modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
+    modalCard: { backgroundColor: 'white', borderRadius: 22, padding: 22 },
+    modalHeader: { fontSize: 18, fontWeight: 'bold', color: '#0f172a' },
+    modalSub: { fontSize: 13, color: '#6b7280', marginTop: 4, marginBottom: 16 },
+    gpsBox: { backgroundColor: '#f0fdf4', padding: 14, borderRadius: 16, borderWidth: 1.5, borderColor: '#bbf7d0', marginBottom: 16 },
+    gpsVal: { fontSize: 15, fontWeight: 'bold', color: '#166534' },
+    gpsTime: { fontSize: 12, color: '#15803d', marginTop: 4 },
+    closeBtn: { backgroundColor: '#0f172a', padding: 14, borderRadius: 14, alignItems: 'center' },
+    closeBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+    emptyText: { color: '#6b7280', textAlign: 'center', marginVertical: 16, fontSize: 13 },
 });

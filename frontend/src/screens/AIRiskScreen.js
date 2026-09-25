@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { predictRisk } from '../api/client';
 
 export default function AIRiskScreen({ route, navigation }) {
-    const { patientId } = route.params;
+    const patientId = route?.params?.patientId || 1;
     const [loading, setLoading] = useState(true);
     const [riskData, setRiskData] = useState(null);
 
@@ -25,65 +25,105 @@ export default function AIRiskScreen({ route, navigation }) {
     };
 
     const getScoreColor = (score) => {
-        if (score < 40) return '#16a34a';
-        if (score < 70) return '#d97706';
-        return '#dc2626';
+        if (score < 40) return '#10b981'; // Green
+        if (score < 70) return '#f59e0b'; // Amber
+        return '#ef4444'; // Coral Red
     };
 
     if (loading) {
         return (
-            <LinearGradient colors={['#3b185f', '#1a0b2e']} style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color="white" />
-                <Text style={{ color: 'white', marginTop: 20, fontSize: 18, fontWeight: 'bold' }}>AI Engine Analyzing Telemetry...</Text>
+            <LinearGradient colors={['#0f172a', '#1e1b4b']} style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#a78bfa" />
+                <Text style={{ color: 'white', marginTop: 20, fontSize: 18, fontWeight: 'bold' }}>
+                    Running Scikit-Learn Inference Model...
+                </Text>
             </LinearGradient>
         );
     }
 
+    const scoreColor = getScoreColor(riskData?.score || 0);
+
     return (
-        <LinearGradient colors={['#3b185f', '#1a0b2e']} style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={24} color="#3b185f" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>🧠 Clinical AI Evaluation</Text>
-                <View style={{ width: 36 }} />
-            </View>
+        <View style={styles.container}>
+            {/* Header */}
+            <LinearGradient colors={['#0f172a', '#1e1b4b']} style={styles.header}>
+                <View style={styles.headerRow}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+                        <Ionicons name="arrow-back" size={22} color="white" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Clinical AI Risk Evaluation</Text>
+                    <View style={{ width: 38 }} />
+                </View>
+
+                <View style={styles.disclaimerPill}>
+                    <Ionicons name="information-circle" size={16} color="#38bdf8" />
+                    <Text style={styles.disclaimerText}>AI Decision-Support System • Clinical Reference Only</Text>
+                </View>
+            </LinearGradient>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.card}>
-                    <Text style={styles.title}>Behavioral AI & Cognitive Inference</Text>
-                    <Text style={styles.subtitle}>Scikit-Learn Random Forest Model</Text>
+                    <Text style={styles.cardMainTitle}>Cognitive & Behavioral Risk Score</Text>
+                    <Text style={styles.cardSubTitle}>Scikit-Learn Random Forest Classifier</Text>
 
+                    {/* Gauge Circle Ring */}
                     <View style={styles.gaugeContainer}>
-                        <View style={[styles.gaugeCircle, { borderColor: getScoreColor(riskData?.score || 0) }]}>
-                            <Text style={[styles.scoreText, { color: getScoreColor(riskData?.score || 0) }]}>
+                        <View style={[styles.gaugeCircle, { borderColor: scoreColor }]}>
+                            <Text style={[styles.scoreText, { color: scoreColor }]}>
                                 {riskData?.score || 0}%
                             </Text>
                             <Text style={styles.scoreLabel}>RISK SCORE</Text>
                         </View>
                     </View>
 
-                    <Text style={[styles.statusText, { color: getScoreColor(riskData?.score || 0) }]}>
-                        Status: {riskData?.status || "Unknown"}
-                    </Text>
+                    {/* Status Badge */}
+                    <View style={[styles.statusBadge, { backgroundColor: `${scoreColor}15`, borderColor: `${scoreColor}40` }]}>
+                        <View style={[styles.statusDot, { backgroundColor: scoreColor }]} />
+                        <Text style={[styles.statusBadgeText, { color: scoreColor }]}>
+                            Cognitive Status: {riskData?.status || "Stable (Low Risk)"}
+                        </Text>
+                    </View>
 
                     <View style={styles.divider} />
 
-                    <Text style={styles.insightHeader}>Clinical Neural Insights</Text>
+                    {/* Neural Insights */}
+                    <Text style={styles.sectionHeader}>🧠 Neural Behavioral Insights</Text>
                     {riskData?.insights?.map((insight, index) => (
                         <View key={index} style={styles.insightBox}>
-                            <Ionicons name="analytics" size={24} color="#7c3aed" style={{ marginRight: 12 }} />
+                            <Ionicons name="analytics" size={22} color="#7c3aed" style={{ marginRight: 12 }} />
                             <Text style={styles.insightText}>{insight}</Text>
                         </View>
                     ))}
 
-                    <View style={styles.metricsBox}>
-                        <Text style={styles.metricLabel}>Total Assigned Tasks: <Text style={styles.metricVal}>{riskData?.raw_metrics?.total_assigned || 0}</Text></Text>
-                        <Text style={styles.metricLabel}>Completed Tasks: <Text style={styles.metricVal}>{riskData?.raw_metrics?.completed || 0}</Text></Text>
-                        <Text style={styles.metricLabel}>Missed Tasks: <Text style={[styles.metricVal, { color: '#dc2626' }]}>{riskData?.raw_metrics?.missed || 0}</Text></Text>
-                        <Text style={styles.metricLabel}>SOS Emergency Dispatches: <Text style={[styles.metricVal, { color: '#d97706' }]}>{riskData?.raw_metrics?.panic_alerts || 0}</Text></Text>
+                    {/* Raw Telemetry Grid */}
+                    <Text style={styles.sectionHeader}>📊 Telemetry Metrics Breakdown</Text>
+                    <View style={styles.metricsGrid}>
+                        <View style={styles.metricCard}>
+                            <Ionicons name="list" size={20} color="#2563eb" />
+                            <Text style={styles.metricVal}>{riskData?.raw_metrics?.total_assigned || 0}</Text>
+                            <Text style={styles.metricLabel}>Total Assigned</Text>
+                        </View>
+
+                        <View style={styles.metricCard}>
+                            <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                            <Text style={styles.metricVal}>{riskData?.raw_metrics?.completed || 0}</Text>
+                            <Text style={styles.metricLabel}>Completed</Text>
+                        </View>
+
+                        <View style={styles.metricCard}>
+                            <Ionicons name="close-circle" size={20} color="#ef4444" />
+                            <Text style={[styles.metricVal, { color: '#ef4444' }]}>{riskData?.raw_metrics?.missed || 0}</Text>
+                            <Text style={styles.metricLabel}>Missed Tasks</Text>
+                        </View>
+
+                        <View style={styles.metricCard}>
+                            <Ionicons name="warning" size={20} color="#f59e0b" />
+                            <Text style={[styles.metricVal, { color: '#f59e0b' }]}>{riskData?.raw_metrics?.panic_alerts || 0}</Text>
+                            <Text style={styles.metricLabel}>SOS Alerts</Text>
+                        </View>
                     </View>
 
+                    {/* Sundowning Projection */}
                     {riskData?.sundowning_window && (
                         <View style={styles.sundownBox}>
                             <Ionicons name="time" size={28} color="#d97706" style={{ marginRight: 12 }} />
@@ -94,38 +134,214 @@ export default function AIRiskScreen({ route, navigation }) {
                         </View>
                     )}
                 </View>
-                <View style={{ height: 40 }} />
             </ScrollView>
-        </LinearGradient>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
+    container: { flex: 1, backgroundColor: '#f8fafc' },
     header: {
-        paddingTop: 55, paddingBottom: 18, paddingHorizontal: 20,
-        backgroundColor: 'white', borderBottomLeftRadius: 24, borderBottomRightRadius: 24,
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
+        paddingTop: 55,
+        paddingBottom: 24,
+        paddingHorizontal: 20,
+        borderBottomLeftRadius: 28,
+        borderBottomRightRadius: 28,
+        boxShadow: '0 10px 25px -5px rgba(15, 23, 42, 0.2)'
     },
-    backBtn: { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
-    headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#1f1545' },
-    content: { padding: 20 },
-    card: { backgroundColor: 'white', borderRadius: 24, padding: 26, alignItems: 'center' },
-    title: { fontSize: 24, fontWeight: 'bold', color: '#1f2a44', textAlign: 'center' },
-    subtitle: { color: '#6b7280', marginTop: 6, textAlign: 'center', fontSize: 15 },
-    gaugeContainer: { marginVertical: 26, alignItems: 'center' },
-    gaugeCircle: { width: 170, height: 170, borderRadius: 85, borderWidth: 9, justifyContent: 'center', alignItems: 'center' },
-    scoreText: { fontSize: 48, fontWeight: 'bold' },
-    scoreLabel: { fontSize: 15, fontWeight: 'bold', color: '#888', marginTop: 4 },
-    statusText: { fontSize: 22, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },
-    divider: { height: 1.5, width: '100%', backgroundColor: '#e2e8f0', marginVertical: 18 },
-    insightHeader: { fontSize: 20, fontWeight: 'bold', color: '#1f2a44', alignSelf: 'flex-start', marginBottom: 14 },
-    insightBox: { backgroundColor: '#f5f3ff', padding: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginBottom: 12, width: '100%', borderWidth: 1, borderColor: '#ddd6fe' },
-    insightText: { flex: 1, color: '#334155', fontSize: 15, lineHeight: 22 },
-    metricsBox: { marginTop: 16, padding: 18, backgroundColor: '#f8fafc', borderRadius: 16, width: '100%', borderWidth: 1.5, borderColor: '#e2e8f0', gap: 8 },
-    metricLabel: { color: '#475569', fontSize: 16 },
-    metricVal: { fontWeight: 'bold', color: '#0f172a', fontSize: 17 },
-    sundownBox: { marginTop: 18, padding: 18, backgroundColor: '#fffbeb', borderRadius: 16, flexDirection: 'row', alignItems: 'center', width: '100%', borderWidth: 1.5, borderColor: '#fde68a' },
-    sundownHeader: { fontSize: 17, fontWeight: 'bold', color: '#b45309' },
-    sundownText: { fontSize: 16, color: '#d97706', marginTop: 4, fontWeight: 'bold' }
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 14
+    },
+    backBtn: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    headerTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: 'white'
+    },
+    disclaimerPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(56, 189, 248, 0.15)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(56, 189, 248, 0.3)'
+    },
+    disclaimerText: {
+        color: '#7dd3fc',
+        fontSize: 11,
+        fontWeight: 'bold'
+    },
+
+    content: {
+        padding: 16,
+        paddingBottom: 110
+    },
+    card: {
+        backgroundColor: 'white',
+        borderRadius: 20,
+        padding: 18,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.05)'
+    },
+    cardMainTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0f172a',
+        textAlign: 'center'
+    },
+    cardSubTitle: {
+        fontSize: 12,
+        color: '#6d28d9',
+        fontWeight: '600',
+        marginTop: 3,
+        textAlign: 'center'
+    },
+
+    gaugeContainer: {
+        marginVertical: 18,
+        alignItems: 'center'
+    },
+    gaugeCircle: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
+    },
+    scoreText: {
+        fontSize: 32,
+        fontWeight: '900'
+    },
+    scoreLabel: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#64748b',
+        letterSpacing: 0.5,
+        marginTop: 1
+    },
+
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 14,
+        borderWidth: 1,
+        gap: 6,
+        marginBottom: 12
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4
+    },
+    statusBadgeText: {
+        fontSize: 13,
+        fontWeight: '800'
+    },
+
+    divider: {
+        height: 1,
+        width: '100%',
+        backgroundColor: '#e2e8f0',
+        marginVertical: 14
+    },
+
+    sectionHeader: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#0f172a',
+        alignSelf: 'flex-start',
+        marginBottom: 10,
+        marginTop: 2
+    },
+    insightBox: {
+        backgroundColor: '#faf5ff',
+        padding: 12,
+        borderRadius: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        width: '100%',
+        borderWidth: 1.5,
+        borderColor: '#ddd6fe'
+    },
+    insightText: {
+        flex: 1,
+        color: '#334155',
+        fontSize: 12,
+        lineHeight: 17,
+        fontWeight: '600'
+    },
+
+    metricsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        width: '100%',
+        marginBottom: 12
+    },
+    metricCard: {
+        flex: 1,
+        minWidth: '45%',
+        backgroundColor: '#f8fafc',
+        borderRadius: 14,
+        padding: 10,
+        borderWidth: 1.5,
+        borderColor: '#e2e8f0',
+        alignItems: 'center'
+    },
+    metricVal: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#0f172a',
+        marginTop: 4
+    },
+    metricLabel: {
+        fontSize: 11,
+        color: '#64748b',
+        fontWeight: '600',
+        marginTop: 2
+    },
+
+    sundownBox: {
+        marginTop: 8,
+        padding: 14,
+        backgroundColor: '#fffbeb',
+        borderRadius: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        borderWidth: 1.5,
+        borderColor: '#fde68a'
+    },
+    sundownHeader: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: '#b45309'
+    },
+    sundownText: {
+        fontSize: 12,
+        color: '#d97706',
+        marginTop: 2,
+        fontWeight: '700'
+    }
 });

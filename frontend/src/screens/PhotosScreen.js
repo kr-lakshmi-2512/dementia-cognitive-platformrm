@@ -438,96 +438,105 @@ const styles = StyleSheet.create({
     },
     backBtn: { padding: 10, backgroundColor: '#f0ebff', borderRadius: 16 },
     addBtn: { padding: 10, backgroundColor: '#f0ebff', borderRadius: 16 },
-    headerTitle: { fontSize: 26, fontWeight: 'bold', color: '#1f1545' },
-    headerSub: { fontSize: 14, color: '#64748b', marginTop: 3 },
+    container: { flex: 1 },
+    header: {
+        paddingTop: 50, paddingBottom: 16, paddingHorizontal: 18,
+        backgroundColor: 'white', borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 4
+    },
+    backBtn: { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
+    addBtn: { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
+    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f1545' },
+    headerSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
 
     heroCard: {
-        backgroundColor: 'white', marginHorizontal: 22, marginTop: 22,
-        borderRadius: 28, padding: 24,
-        shadowColor: '#7c3aed', shadowOpacity: 0.15, shadowRadius: 12, elevation: 5
+        backgroundColor: 'white', marginHorizontal: 16, marginTop: 16,
+        borderRadius: 20, padding: 18,
+        shadowColor: '#7c3aed', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4
     },
-    heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-    heroTitle: { fontSize: 22, fontWeight: 'bold', color: '#1f1545' },
-    heroSub: { fontSize: 15, color: '#64748b', marginTop: 4, lineHeight: 21 },
+    heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+    heroTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f1545' },
+    heroSub: { fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 17 },
     heroScanBtn: {
-        backgroundColor: '#7c3aed', paddingVertical: 18, borderRadius: 20,
+        backgroundColor: '#7c3aed', paddingVertical: 14, borderRadius: 16,
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
     },
-    heroScanBtnText: { color: 'white', fontWeight: 'bold', fontSize: 18 },
+    heroScanBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
 
-    content: { padding: 22, paddingBottom: 80 },
+    content: { padding: 16, paddingBottom: 80 },
 
     memberCard: {
-        backgroundColor: 'white', borderRadius: 28, marginBottom: 20,
-        padding: 24, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 5
+        backgroundColor: 'white', borderRadius: 20, marginBottom: 14,
+        padding: 18, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4
     },
-    memberHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-    roleIconCircle: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-    memberName: { fontSize: 25, fontWeight: 'bold', color: '#1f1545' },
-    memberRelation: { fontSize: 17, fontWeight: 'bold', marginTop: 3 },
-    memberDesc: { fontSize: 16, color: '#4b5563', lineHeight: 24, marginBottom: 18 },
+    memberHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    roleIconCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+    memberName: { fontSize: 16, fontWeight: 'bold', color: '#1f1545' },
+    memberRelation: { fontSize: 13, fontWeight: 'bold', marginTop: 2 },
+    memberDesc: { fontSize: 12, color: '#4b5563', lineHeight: 17, marginBottom: 14 },
 
     cardIdentifyBtn: {
-        paddingVertical: 14, borderRadius: 18,
+        paddingVertical: 10, borderRadius: 14,
         flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
     },
-    cardIdentifyText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
-    trashBtn: { padding: 10, backgroundColor: '#fee2e2', borderRadius: 14 },
+    cardIdentifyText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+    trashBtn: { padding: 8, backgroundColor: '#fee2e2', borderRadius: 12 },
 
-    cameraModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 24 },
-    cameraCard: { backgroundColor: '#1e1b4b', borderRadius: 30, padding: 26, alignItems: 'center' },
-    cameraModalTitle: { fontSize: 22, fontWeight: 'bold', color: 'white', textAlign: 'center' },
-    cameraModalSub: { fontSize: 14, color: '#a78bfa', marginTop: 4, marginBottom: 18 },
+    cameraModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 18 },
+    cameraCard: { backgroundColor: '#1e1b4b', borderRadius: 22, padding: 20, alignItems: 'center' },
+    cameraModalTitle: { fontSize: 16, fontWeight: 'bold', color: 'white', textAlign: 'center' },
+    cameraModalSub: { fontSize: 12, color: '#a78bfa', marginTop: 3, marginBottom: 14 },
     viewfinderFrame: {
-        width: 280, height: 280, borderRadius: 140, overflow: 'hidden',
-        borderWidth: 4, borderColor: '#4ade80', position: 'relative', backgroundColor: '#000'
+        width: 220, height: 220, borderRadius: 110, overflow: 'hidden',
+        borderWidth: 3, borderColor: '#4ade80', position: 'relative', backgroundColor: '#000'
     },
     reticleRing: {
-        position: 'absolute', top: 20, left: 20, right: 20, bottom: 20,
-        borderRadius: 120, borderWidth: 2, borderColor: 'rgba(74,222,128,0.5)', borderStyle: 'dashed'
+        position: 'absolute', top: 16, left: 16, right: 16, bottom: 16,
+        borderRadius: 94, borderWidth: 2, borderColor: 'rgba(74,222,128,0.5)', borderStyle: 'dashed'
     },
-    cameraActionRow: { flexDirection: 'row', gap: 14, marginTop: 22, width: '100%' },
-    closeCameraBtn: { flex: 1, padding: 16, borderRadius: 18, backgroundColor: '#374151', alignItems: 'center' },
-    closeCameraText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
-    captureBtn: { flex: 1.5, padding: 16, borderRadius: 18, backgroundColor: '#16a34a', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 },
-    captureBtnText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+    cameraActionRow: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
+    closeCameraBtn: { flex: 1, padding: 12, borderRadius: 14, backgroundColor: '#374151', alignItems: 'center' },
+    closeCameraText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+    captureBtn: { flex: 1.5, padding: 12, borderRadius: 14, backgroundColor: '#16a34a', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+    captureBtnText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
-    scanModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 24 },
-    scanCard: { backgroundColor: 'white', borderRadius: 30, padding: 28, alignItems: 'center' },
+    scanModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 18 },
+    scanCard: { backgroundColor: 'white', borderRadius: 22, padding: 20, alignItems: 'center' },
     scanBadge: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#d1fae5',
-        paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, marginBottom: 20
+        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, marginBottom: 14
     },
-    scanBadgeText: { color: '#065f46', fontWeight: 'bold', fontSize: 13, marginLeft: 8 },
-    scanIconCircle: { width: 120, height: 120, borderRadius: 60, justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
-    scanPersonName: { fontSize: 28, fontWeight: 'bold', color: '#1f1545', textAlign: 'center' },
-    scanPersonRelation: { fontSize: 19, fontWeight: 'bold', color: '#7c3aed', marginTop: 5 },
-    scanPersonDesc: { fontSize: 16, color: '#4b5563', textAlign: 'center', marginTop: 12, lineHeight: 24, paddingHorizontal: 10 },
+    scanBadgeText: { color: '#065f46', fontWeight: 'bold', fontSize: 11, marginLeft: 6 },
+    scanIconCircle: { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+    scanPersonName: { fontSize: 18, fontWeight: 'bold', color: '#1f1545', textAlign: 'center' },
+    scanPersonRelation: { fontSize: 14, fontWeight: 'bold', color: '#7c3aed', marginTop: 3 },
+    scanPersonDesc: { fontSize: 12, color: '#4b5563', textAlign: 'center', marginTop: 8, lineHeight: 18, paddingHorizontal: 8 },
 
     speakBtn: {
-        backgroundColor: '#16a34a', paddingHorizontal: 26, paddingVertical: 16,
-        borderRadius: 20, flexDirection: 'row', alignItems: 'center', marginTop: 22, width: '100%', justifyContent: 'center'
+        backgroundColor: '#16a34a', paddingHorizontal: 20, paddingVertical: 12,
+        borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginTop: 16, width: '100%', justifyContent: 'center'
     },
-    speakBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
-    closeScanBtn: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 26 },
-    closeScanText: { color: '#888', fontWeight: 'bold', fontSize: 16 },
+    speakBtnText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+    closeScanBtn: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 20 },
+    closeScanText: { color: '#888', fontWeight: 'bold', fontSize: 13 },
 
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 22 },
-    modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 28, padding: 28 },
-    modalTitle: { fontSize: 26, fontWeight: 'bold', marginBottom: 22, textAlign: 'center', color: '#1f1545' },
-    label: { fontSize: 16, fontWeight: 'bold', color: '#7c3aed', marginBottom: 8 },
-    input: { borderWidth: 2, borderColor: '#cbd5e1', borderRadius: 18, padding: 16, marginBottom: 20, fontSize: 17, backgroundColor: '#f8fafc', color: '#1f1545' },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12, gap: 14 },
-    cancelBtn: { padding: 18, flex: 1, alignItems: 'center', backgroundColor: '#e2e8f0', borderRadius: 18 },
-    cancelText: { color: '#475569', fontWeight: 'bold', fontSize: 17 },
-    saveBtn: { backgroundColor: '#7c3aed', padding: 18, borderRadius: 18, flex: 1.2, alignItems: 'center' },
-    saveText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 18 },
+    modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 22, padding: 20 },
+    modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center', color: '#1f1545' },
+    label: { fontSize: 12, fontWeight: 'bold', color: '#7c3aed', marginBottom: 6 },
+    input: { borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 14, padding: 12, marginBottom: 14, fontSize: 13, backgroundColor: '#f8fafc', color: '#1f1545' },
+    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 10 },
+    cancelBtn: { padding: 12, flex: 1, alignItems: 'center', backgroundColor: '#e2e8f0', borderRadius: 14 },
+    cancelText: { color: '#475569', fontWeight: 'bold', fontSize: 13 },
+    saveBtn: { backgroundColor: '#7c3aed', padding: 12, borderRadius: 14, flex: 1.2, alignItems: 'center' },
+    saveText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
 
     personPill: {
-        paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16,
+        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12,
         backgroundColor: '#374151', borderWidth: 1, borderColor: '#4b5563'
     },
     personPillActive: { backgroundColor: '#7c3aed', borderColor: '#a78bfa' },
-    personPillText: { color: '#9ca3af', fontSize: 13, fontWeight: 'bold' },
-    personPillTextActive: { color: 'white', fontSize: 13, fontWeight: 'bold' },
+    personPillText: { color: '#9ca3af', fontSize: 11, fontWeight: 'bold' },
+    personPillTextActive: { color: 'white', fontSize: 11, fontWeight: 'bold' },
 });

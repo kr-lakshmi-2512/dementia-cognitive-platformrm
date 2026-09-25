@@ -82,16 +82,16 @@ export default function NotesScreen({ navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, backgroundColor: 'white', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, flexDirection: 'row', alignItems: 'center' },
+    header: { paddingTop: 50, paddingBottom: 16, paddingHorizontal: 16, backgroundColor: 'white', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexDirection: 'row', alignItems: 'center' },
     backButton: { flexDirection: 'row', alignItems: 'center' },
-    backText: { color: '#3b185f', fontSize: 16, marginLeft: 5, fontWeight: 'bold' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginLeft: 40 },
-    content: { flex: 1, padding: 20 },
-    inputContainer: { backgroundColor: 'white', padding: 20, borderRadius: 15, marginBottom: 15 },
-    inputTitle: { fontSize: 18, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 10, marginBottom: 10 },
-    inputContent: { minHeight: 60, fontSize: 16 },
-    noteCard: { backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 10 },
-    noteTitle: { fontSize: 16, fontWeight: 'bold', color: '#111' },
-    noteDesc: { fontSize: 14, color: '#666', marginTop: 5 },
-    fab: { position: 'absolute', bottom: 30, right: 30, width: 60, height: 60, borderRadius: 30, backgroundColor: '#3b185f', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 5 }
+    backText: { color: '#3b185f', fontSize: 13, marginLeft: 5, fontWeight: 'bold' },
+    headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginLeft: 30 },
+    content: { flex: 1, padding: 16 },
+    inputContainer: { backgroundColor: 'white', padding: 16, borderRadius: 14, marginBottom: 12 },
+    inputTitle: { fontSize: 14, fontWeight: 'bold', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8, marginBottom: 8 },
+    inputContent: { minHeight: 50, fontSize: 13 },
+    noteCard: { backgroundColor: 'white', padding: 12, borderRadius: 10, marginBottom: 8 },
+    noteTitle: { fontSize: 13, fontWeight: 'bold', color: '#111' },
+    noteDesc: { fontSize: 12, color: '#666', marginTop: 4 },
+    fab: { position: 'absolute', bottom: 30, right: 30, width: 50, height: 50, borderRadius: 25, backgroundColor: '#3b185f', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 5 }
 });

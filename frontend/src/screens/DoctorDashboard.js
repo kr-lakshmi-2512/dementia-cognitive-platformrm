@@ -359,102 +359,102 @@ const styles = StyleSheet.create({
         backgroundColor: '#1e1b4b', borderRadius: 28, padding: 28,
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22
     },
-    headerTitle: { fontSize: 32, fontWeight: 'bold', color: 'white' },
-    headerSub: { fontSize: 18, color: '#c4b5fd', marginTop: 6 },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
+    headerSub: { fontSize: 13, color: '#c4b5fd', marginTop: 4 },
     doctorBadge: {
-        backgroundColor: '#7c3aed', paddingHorizontal: 18, paddingVertical: 14,
-        borderRadius: 20, alignItems: 'center', flexDirection: 'row', gap: 10
+        backgroundColor: '#7c3aed', paddingHorizontal: 14, paddingVertical: 8,
+        borderRadius: 14, alignItems: 'center', flexDirection: 'row', gap: 6
     },
-    doctorBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+    doctorBadgeText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
-    statsRow: { flexDirection: 'row', gap: 16, marginBottom: 22 },
+    statsRow: { flexDirection: 'row', gap: 12, marginBottom: 18 },
     statCard: {
-        flex: 1, backgroundColor: 'white', borderRadius: 24, padding: 22,
-        alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+        flex: 1, backgroundColor: 'white', borderRadius: 18, padding: 16,
+        alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, elevation: 3
     },
-    statNum: { fontSize: 34, fontWeight: 'bold', color: '#1e1b4b' },
-    statLabel: { fontSize: 15, color: '#6b7280', marginTop: 6, fontWeight: '600' },
+    statNum: { fontSize: 24, fontWeight: 'bold', color: '#1e1b4b' },
+    statLabel: { fontSize: 12, color: '#6b7280', marginTop: 4, fontWeight: '600' },
 
     sectionCard: {
-        backgroundColor: 'white', borderRadius: 28, padding: 26, marginBottom: 22,
-        shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 4
+        backgroundColor: 'white', borderRadius: 20, padding: 18, marginBottom: 18,
+        shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, elevation: 3
     },
-    sectionTitle: { fontSize: 24, fontWeight: 'bold', color: '#1e1b4b' },
-    patientSubLabel: { fontSize: 17, color: '#7c3aed', marginTop: 4, marginBottom: 18, fontWeight: '600' },
+    sectionTitle: { fontSize: 17, fontWeight: 'bold', color: '#1e1b4b' },
+    patientSubLabel: { fontSize: 13, color: '#7c3aed', marginTop: 3, marginBottom: 14, fontWeight: '600' },
     cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 
-    inputRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    inputRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
     textInput: {
-        flex: 1, borderWidth: 2, borderColor: '#cbd5e1', borderRadius: 18,
-        paddingHorizontal: 20, paddingVertical: 16, fontSize: 18, backgroundColor: '#f8fafc', color: '#1e1b4b'
+        flex: 1, borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 14,
+        paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, backgroundColor: '#f8fafc', color: '#1e1b4b'
     },
     actionBtn: {
-        backgroundColor: '#7c3aed', paddingHorizontal: 26, borderRadius: 18,
+        backgroundColor: '#7c3aed', paddingHorizontal: 18, borderRadius: 14,
         justifyContent: 'center', alignItems: 'center'
     },
-    actionBtnText: { color: 'white', fontWeight: 'bold', fontSize: 17 },
+    actionBtnText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
 
     patientPill: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f3ff',
-        paddingHorizontal: 22, paddingVertical: 18, borderRadius: 24, marginRight: 14,
-        borderWidth: 2, borderColor: '#ddd6fe'
+        paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, marginRight: 10,
+        borderWidth: 1.5, borderColor: '#ddd6fe'
     },
     patientPillActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
-    patientPillName: { fontWeight: 'bold', fontSize: 20, color: '#1e1b4b' },
-    patientPillSub: { fontSize: 15, color: '#6b7280', marginTop: 4 },
+    patientPillName: { fontWeight: 'bold', fontSize: 15, color: '#1e1b4b' },
+    patientPillSub: { fontSize: 12, color: '#6b7280', marginTop: 2 },
     whiteText: { color: 'white' },
     lightText: { color: '#e9d5ff' },
-    emptyText: { color: '#6b7280', textAlign: 'center', marginVertical: 20, fontSize: 17 },
+    emptyText: { color: '#6b7280', textAlign: 'center', marginVertical: 16, fontSize: 13 },
 
     refreshAiBtn: {
-        backgroundColor: '#7c3aed', paddingHorizontal: 20, paddingVertical: 12,
-        borderRadius: 16, flexDirection: 'row', alignItems: 'center'
+        backgroundColor: '#7c3aed', paddingHorizontal: 14, paddingVertical: 8,
+        borderRadius: 12, flexDirection: 'row', alignItems: 'center'
     },
-    refreshAiText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+    refreshAiText: { color: 'white', fontSize: 13, fontWeight: 'bold' },
 
-    loadingBox: { padding: 40, alignItems: 'center' },
-    loadingText: { color: '#6b7280', fontSize: 17, marginTop: 16, textAlign: 'center' },
+    loadingBox: { padding: 30, alignItems: 'center' },
+    loadingText: { color: '#6b7280', fontSize: 13, marginTop: 12, textAlign: 'center' },
 
-    aiResultBox: { marginTop: 16 },
-    riskBadgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, marginBottom: 22 },
+    aiResultBox: { marginTop: 12 },
+    riskBadgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 16, borderRadius: 18, marginBottom: 16 },
     riskGaugeCircle: {
-        width: 120, height: 120, borderRadius: 60, borderWidth: 8,
+        width: 80, height: 80, borderRadius: 40, borderWidth: 6,
         justifyContent: 'center', alignItems: 'center', backgroundColor: 'white'
     },
-    riskGaugeNum: { fontSize: 36, fontWeight: 'bold' },
-    riskGaugeLabel: { fontSize: 12, fontWeight: 'bold', color: '#888', marginTop: 2 },
-    aiStatusHeader: { fontSize: 14, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 'bold' },
-    aiStatusTitle: { fontSize: 26, fontWeight: 'bold', marginTop: 4 },
-    adherenceProgressBg: { height: 14, backgroundColor: '#e2e8f0', borderRadius: 7, marginTop: 14, overflow: 'hidden' },
-    adherenceProgressFill: { height: '100%', backgroundColor: '#16a34a', borderRadius: 7 },
-    adherenceText: { fontSize: 17, color: '#334155', marginTop: 10 },
+    riskGaugeNum: { fontSize: 24, fontWeight: 'bold' },
+    riskGaugeLabel: { fontSize: 10, fontWeight: 'bold', color: '#888', marginTop: 1 },
+    aiStatusHeader: { fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 'bold' },
+    aiStatusTitle: { fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+    adherenceProgressBg: { height: 10, backgroundColor: '#e2e8f0', borderRadius: 5, marginTop: 10, overflow: 'hidden' },
+    adherenceProgressFill: { height: '100%', backgroundColor: '#16a34a', borderRadius: 5 },
+    adherenceText: { fontSize: 13, color: '#334155', marginTop: 8 },
 
-    metricsGrid: { flexDirection: 'row', gap: 16, marginBottom: 22 },
+    metricsGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
     metricItem: {
-        flex: 1, backgroundColor: '#f8fafc', padding: 20, borderRadius: 22,
-        alignItems: 'center', borderWidth: 2, borderColor: '#e2e8f0'
+        flex: 1, backgroundColor: '#f8fafc', padding: 14, borderRadius: 16,
+        alignItems: 'center', borderWidth: 1.5, borderColor: '#e2e8f0'
     },
-    metricVal: { fontSize: 24, fontWeight: 'bold', color: '#1e1b4b', marginTop: 8 },
-    metricSub: { fontSize: 14, color: '#64748b', textAlign: 'center', marginTop: 6, fontWeight: '600' },
+    metricVal: { fontSize: 18, fontWeight: 'bold', color: '#1e1b4b', marginTop: 6 },
+    metricSub: { fontSize: 12, color: '#64748b', textAlign: 'center', marginTop: 4, fontWeight: '600' },
 
     sundownBox: {
-        backgroundColor: '#fffbeb', borderRadius: 22, padding: 22,
-        flexDirection: 'row', alignItems: 'center', marginBottom: 22,
-        borderWidth: 2, borderColor: '#fde68a'
+        backgroundColor: '#fffbeb', borderRadius: 16, padding: 16,
+        flexDirection: 'row', alignItems: 'center', marginBottom: 16,
+        borderWidth: 1.5, borderColor: '#fde68a'
     },
-    sundownTitle: { fontSize: 18, fontWeight: 'bold', color: '#b45309' },
-    sundownTime: { fontSize: 24, fontWeight: 'bold', color: '#d97706', marginTop: 4 },
-    sundownDesc: { fontSize: 15, color: '#92400e', marginTop: 4, lineHeight: 22 },
+    sundownTitle: { fontSize: 14, fontWeight: 'bold', color: '#b45309' },
+    sundownTime: { fontSize: 18, fontWeight: 'bold', color: '#d97706', marginTop: 2 },
+    sundownDesc: { fontSize: 12, color: '#92400e', marginTop: 3, lineHeight: 17 },
 
-    reasonHeader: { fontSize: 20, fontWeight: 'bold', color: '#1e1b4b', marginBottom: 14 },
-    insightRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 14 },
-    insightText: { flex: 1, fontSize: 17, color: '#334155', lineHeight: 25 },
+    reasonHeader: { fontSize: 15, fontWeight: 'bold', color: '#1e1b4b', marginBottom: 10 },
+    insightRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
+    insightText: { flex: 1, fontSize: 13, color: '#334155', lineHeight: 18 },
 
-    chatContainer: { marginTop: 14 },
-    msgBubble: { padding: 18, borderRadius: 20, marginBottom: 14, maxWidth: '85%' },
+    chatContainer: { marginTop: 10 },
+    msgBubble: { padding: 12, borderRadius: 14, marginBottom: 10, maxWidth: '85%' },
     msgMine: { alignSelf: 'flex-end', backgroundColor: '#7c3aed' },
     msgTheirs: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9' },
-    msgSender: { fontSize: 14, fontWeight: 'bold', color: '#64748b', marginBottom: 6 },
-    msgContent: { fontSize: 18, color: '#1e1b4b', lineHeight: 26 },
-    msgTime: { fontSize: 13, color: '#94a3b8', marginTop: 8, textAlign: 'right' },
+    msgSender: { fontSize: 12, fontWeight: 'bold', color: '#64748b', marginBottom: 4 },
+    msgContent: { fontSize: 13, color: '#1e1b4b', lineHeight: 18 },
+    msgTime: { fontSize: 11, color: '#94a3b8', marginTop: 6, textAlign: 'right' },
 });

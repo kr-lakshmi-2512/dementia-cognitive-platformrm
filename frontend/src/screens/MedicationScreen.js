@@ -350,65 +350,65 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 20, padding: 32,
         alignItems: 'center', marginBottom: 22
     },
-    emptyText: { color: '#c4b5fd', fontSize: 17, marginTop: 12, fontWeight: '600' },
-    emptySubText: { color: '#aaa', fontSize: 14, marginTop: 6 },
+    emptyText: { color: '#c4b5fd', fontSize: 14, marginTop: 10, fontWeight: '600' },
+    emptySubText: { color: '#aaa', fontSize: 12, marginTop: 4 },
     reminderCard: {
-        backgroundColor: 'rgba(255,255,255,0.97)', borderRadius: 18, padding: 16,
-        marginBottom: 14, flexDirection: 'row', alignItems: 'center',
-        shadowColor: '#7c3aed', shadowOpacity: 0.08, shadowRadius: 8, elevation: 3
+        backgroundColor: 'rgba(255,255,255,0.97)', borderRadius: 16, padding: 14,
+        marginBottom: 12, flexDirection: 'row', alignItems: 'center',
+        shadowColor: '#7c3aed', shadowOpacity: 0.08, shadowRadius: 6, elevation: 2
     },
     categoryBadge: {
-        width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center'
+        width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center'
     },
-    reminderTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f1545' },
-    reminderCategory: { fontSize: 13, color: '#64748b', marginTop: 2 },
-    timeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-    reminderTime: { color: '#475569', fontSize: 14, fontWeight: '600' },
+    reminderTitle: { fontSize: 14, fontWeight: 'bold', color: '#1f1545' },
+    reminderCategory: { fontSize: 11, color: '#64748b', marginTop: 1 },
+    timeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    reminderTime: { color: '#475569', fontSize: 12, fontWeight: '600' },
     statusBadge: {
-        marginTop: 10, paddingHorizontal: 16, paddingVertical: 10,
-        borderRadius: 20, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center'
+        marginTop: 8, paddingHorizontal: 12, paddingVertical: 6,
+        borderRadius: 14, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center'
     },
-    statusText: { fontSize: 14, fontWeight: 'bold', color: 'white' },
-    actionCol: { flexDirection: 'column', gap: 10, marginLeft: 10 },
+    statusText: { fontSize: 12, fontWeight: 'bold', color: 'white' },
+    actionCol: { flexDirection: 'column', gap: 8, marginLeft: 8 },
     editBtn: {
-        backgroundColor: '#f59e0b', padding: 11, borderRadius: 12,
-        justifyContent: 'center', alignItems: 'center', marginBottom: 6
+        backgroundColor: '#f59e0b', padding: 8, borderRadius: 10,
+        justifyContent: 'center', alignItems: 'center', marginBottom: 4
     },
     delBtn: {
-        backgroundColor: '#ef4444', padding: 11, borderRadius: 12,
+        backgroundColor: '#ef4444', padding: 8, borderRadius: 10,
         justifyContent: 'center', alignItems: 'center'
     },
     formCard: {
-        backgroundColor: 'rgba(255,255,255,0.98)', borderRadius: 24, padding: 24, marginTop: 10,
-        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 15, elevation: 6
+        backgroundColor: 'rgba(255,255,255,0.98)', borderRadius: 20, padding: 18, marginTop: 8,
+        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 4
     },
-    formTitle: { fontSize: 20, fontWeight: 'bold', color: '#3b185f', marginBottom: 18 },
-    label: { fontSize: 14, color: '#7c3aed', fontWeight: 'bold', letterSpacing: 0.5, marginBottom: 8 },
-    pillContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    formTitle: { fontSize: 16, fontWeight: 'bold', color: '#3b185f', marginBottom: 14 },
+    label: { fontSize: 12, color: '#7c3aed', fontWeight: 'bold', letterSpacing: 0.3, marginBottom: 6 },
+    pillContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     pill: {
-        backgroundColor: '#f0ebff', paddingHorizontal: 16, paddingVertical: 10,
-        borderRadius: 22, marginRight: 8, marginBottom: 6
+        backgroundColor: '#f0ebff', paddingHorizontal: 12, paddingVertical: 6,
+        borderRadius: 16, marginRight: 6, marginBottom: 4
     },
     pillActive: { backgroundColor: '#7c3aed' },
-    pillText: { color: '#7c3aed', fontWeight: 'bold', fontSize: 14 },
+    pillText: { color: '#7c3aed', fontWeight: 'bold', fontSize: 12 },
     pillTextActive: { color: 'white' },
     input: {
         borderWidth: 1.5, borderColor: '#e9d5ff', backgroundColor: '#faf5ff',
-        borderRadius: 14, padding: 14, fontSize: 16, color: '#1f1545'
+        borderRadius: 12, padding: 10, fontSize: 13, color: '#1f1545'
     },
     timeInput: {
         borderWidth: 1.5, borderColor: '#e9d5ff', backgroundColor: '#faf5ff',
-        borderRadius: 14, padding: 14, fontSize: 20, fontWeight: 'bold',
-        color: '#3b185f', letterSpacing: 1
+        borderRadius: 12, padding: 10, fontSize: 15, fontWeight: 'bold',
+        color: '#3b185f', letterSpacing: 0.5
     },
-    buttonRow: { flexDirection: 'row', marginTop: 24, gap: 12 },
+    buttonRow: { flexDirection: 'row', marginTop: 18, gap: 10 },
     saveBtn: {
-        backgroundColor: '#7c3aed', flex: 1, padding: 16, borderRadius: 16,
+        backgroundColor: '#7c3aed', flex: 1, padding: 12, borderRadius: 14,
         alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
-        shadowColor: '#7c3aed', shadowOpacity: 0.4, shadowRadius: 8, elevation: 5
+        shadowColor: '#7c3aed', shadowOpacity: 0.3, shadowRadius: 6, elevation: 4
     },
     cancelBtn: {
-        backgroundColor: '#9ca3af', flex: 0.5, padding: 16, borderRadius: 16, alignItems: 'center'
+        backgroundColor: '#9ca3af', flex: 0.5, padding: 12, borderRadius: 14, alignItems: 'center'
     },
-    btnText: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+    btnText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
 });

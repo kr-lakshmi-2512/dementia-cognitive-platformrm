@@ -66,14 +66,14 @@ export default function ContactsScreen({ navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { paddingTop: 60, paddingBottom: 20, paddingHorizontal: 20, backgroundColor: 'white', borderBottomLeftRadius: 20, borderBottomRightRadius: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-    content: { flex: 1, padding: 20 },
-    addForm: { backgroundColor: 'white', padding: 20, borderRadius: 15, marginBottom: 20 },
-    input: { height: 40, borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 10 },
-    addButton: { backgroundColor: '#3b185f', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 10 },
-    contactCard: { backgroundColor: 'white', padding: 15, borderRadius: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
-    avatarPlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    contactName: { fontSize: 16, fontWeight: 'bold', color: '#111' },
-    contactPhone: { fontSize: 13, color: '#888', marginTop: 3 }
+    header: { paddingTop: 50, paddingBottom: 16, paddingHorizontal: 16, backgroundColor: 'white', borderBottomLeftRadius: 16, borderBottomRightRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+    content: { flex: 1, padding: 16 },
+    addForm: { backgroundColor: 'white', padding: 16, borderRadius: 14, marginBottom: 16 },
+    input: { height: 38, borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 8, fontSize: 13 },
+    addButton: { backgroundColor: '#3b185f', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 8 },
+    contactCard: { backgroundColor: 'white', padding: 12, borderRadius: 10, marginBottom: 8, flexDirection: 'row', alignItems: 'center' },
+    avatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    contactName: { fontSize: 13, fontWeight: 'bold', color: '#111' },
+    contactPhone: { fontSize: 11, color: '#888', marginTop: 2 }
 });
