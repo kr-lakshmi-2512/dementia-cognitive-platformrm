@@ -227,7 +227,6 @@ export default function PatientDashboard({ navigation }) {
             const [user, data] = await Promise.all([getUserRole(), fetchReminders()]);
             setCurrentUser(user);
             setReminders(data);
-            checkForDueMedications(data);
         } catch (err) {
             console.error('Failed to load patient dashboard:', err);
         }
@@ -247,8 +246,8 @@ export default function PatientDashboard({ navigation }) {
             const schedHours = scheduledDate.getHours();
             const schedMinutes = scheduledDate.getMinutes();
 
-            // Trigger strictly when current time reaches the exact scheduled hour & minute
-            const isTimeMatch = (currentHours === schedHours) && Math.abs(currentMinutes - schedMinutes) <= 2;
+            // Trigger ONLY when system clock reaches exact scheduled hour and minute
+            const isTimeMatch = (currentHours === schedHours) && (currentMinutes === schedMinutes);
 
             if (isTimeMatch) {
                 checkedIds.current.add(rem.id);
