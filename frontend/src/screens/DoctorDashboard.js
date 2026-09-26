@@ -29,7 +29,7 @@ const getPatientAnalyticsData = (patient) => {
             circadianSlots: [
                 { time: '🌅 Morning (8 AM - 12 PM)', status: 'High Memory Focus', pct: 95, color: '#10b981' },
                 { time: '☀️ Afternoon (12 PM - 4 PM)', status: 'Stable Routine', pct: 86, color: '#3b82f6' },
-                { time: '<ctrl42> Evening (4 PM - 8 PM)', status: 'Sundowning Window (Mild Agitation)', pct: 62, color: '#f59e0b' },
+                { time: '🌆 Evening (4 PM - 8 PM)', status: 'Sundowning Window (Mild Agitation)', pct: 62, color: '#f59e0b' },
                 { time: '🌙 Night (8 PM - 12 AM)', status: 'Restful Sleep', pct: 90, color: '#7c3aed' },
             ],
         };
@@ -74,7 +74,7 @@ const getPatientAnalyticsData = (patient) => {
     const circadianSlots = [
         { time: '🌅 Morning (8 AM - 12 PM)', status: morningPct > 85 ? 'High Memory Focus' : 'Moderate Retention', pct: Math.round(morningPct), color: '#10b981' },
         { time: '☀️ Afternoon (12 PM - 4 PM)', status: afternoonPct > 75 ? 'Stable Routine' : 'Mild Fatigue', pct: Math.round(afternoonPct), color: '#3b82f6' },
-        { time: '<ctrl42> Evening (4 PM - 8 PM)', status: eveningPct < 60 ? 'Sundowning Window (Agitation Spike)' : 'Controlled Evening', pct: Math.round(eveningPct), color: eveningPct < 60 ? '#ef4444' : '#f59e0b' },
+        { time: '🌆 Evening (4 PM - 8 PM)', status: eveningPct < 60 ? 'Sundowning Window (Agitation Spike)' : 'Controlled Evening', pct: Math.round(eveningPct), color: eveningPct < 60 ? '#ef4444' : '#f59e0b' },
         { time: '🌙 Night (8 PM - 12 AM)', status: nightPct > 80 ? 'Restful Sleep' : 'Restless Sleep Pattern', pct: Math.round(nightPct), color: '#7c3aed' },
     ];
 
