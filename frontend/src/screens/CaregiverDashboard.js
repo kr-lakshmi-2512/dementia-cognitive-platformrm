@@ -8,7 +8,44 @@ import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
     fetchPatientLocation, parseUTC, predictRisk
-} from '../api/client';
+// Helper function to synthesize emergency siren audio sound and speech alert
+const playEmergencySirenSound = (customText) => {
+    try {
+        if (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            const now = ctx.currentTime;
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.25);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.5);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.75);
+            osc.frequency.linearRampToValueAtTime(800, now + 1.0);
+            osc.frequency.linearRampToValueAtTime(1200, now + 1.25);
+            osc.frequency.linearRampToValueAtTime(800, now + 1.5);
+            gain.gain.setValueAtTime(0.7, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now);
+            osc.stop(now + 1.8);
+        }
+    } catch (e) {
+        console.log('Siren sound error:', e);
+    }
+
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utt = new window.SpeechSynthesisUtterance(customText || "EMERGENCY SOS ALERT ACTIVATED! Medical alert signal dispatched!");
+        utt.lang = 'en-IN';
+        utt.rate = 0.9;
+        utt.pitch = 1.1;
+        utt.volume = 1;
+        window.speechSynthesis.speak(utt);
+    }
+};
 
 // Helper function to generate dynamic behavior & risk graph telemetry per patient
 const getPatientAnalyticsData = (patient, alerts = [], symptomLog = []) => {

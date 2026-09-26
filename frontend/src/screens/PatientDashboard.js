@@ -41,6 +41,41 @@ const speak = (text, onEnd) => {
     window.speechSynthesis.speak(utt);
 };
 
+const playEmergencySirenSound = () => {
+    try {
+        if (Platform.OS === 'web' && (window.AudioContext || window.webkitAudioContext)) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioCtx();
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            
+            const now = ctx.currentTime;
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.25);
+            osc.frequency.linearRampToValueAtTime(800, now + 0.5);
+            osc.frequency.linearRampToValueAtTime(1200, now + 0.75);
+            osc.frequency.linearRampToValueAtTime(800, now + 1.0);
+            osc.frequency.linearRampToValueAtTime(1200, now + 1.25);
+            osc.frequency.linearRampToValueAtTime(800, now + 1.5);
+            
+            gain.gain.setValueAtTime(0.7, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now);
+            osc.stop(now + 1.8);
+        }
+    } catch (e) {
+        console.log('Siren audio error:', e);
+    }
+
+    speak("ALERT! Emergency SOS sent! Caregiver Lakshmi and Doctor Pushpa have been notified!");
+};
+
 export default function PatientDashboard({ navigation }) {
     const [reminders, setReminders]             = useState([]);
     const [currentUser, setCurrentUser]         = useState(null);
@@ -333,6 +368,7 @@ export default function PatientDashboard({ navigation }) {
     };
 
     const handlePanic = async () => {
+        playEmergencySirenSound();
         try {
             await triggerPanicAlert();
             showAlert('🚨 EMERGENCY SOS SENT', `Immediate notification sent to Caregiver Lakshmi & Dr. Pushpa!\nPatient: ${currentUser?.full_name || 'Patient'}`);
