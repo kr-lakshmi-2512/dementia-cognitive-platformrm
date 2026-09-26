@@ -8,6 +8,8 @@ import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
     fetchPatientLocation, parseUTC, predictRisk
+} from '../api/client';
+
 // Helper function to synthesize emergency siren audio sound and speech alert
 const playEmergencySirenSound = (customText) => {
     try {
