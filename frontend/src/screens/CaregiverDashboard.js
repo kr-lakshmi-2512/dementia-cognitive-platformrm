@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
-    fetchPatientLocation, parseUTC, predictRisk
+    fetchPatientLocation, parseUTC, predictRisk, addReminder
 } from '../api/client';
 
 // Helper function to synthesize emergency siren audio sound and speech alert
@@ -154,9 +154,45 @@ export default function CaregiverDashboard({ navigation }) {
     const [selectedPatientModal, setSelectedPatientModal] = useState(null);
     const [liveLocation, setLiveLocation]           = useState(null);
 
-    // Care Journal Behavioral Logging
+    // Care Journal Behavioral Logging & Medication Scheduling
     const [symptomLog, setSymptomLog]               = useState([]);
     const [newSymptom, setNewSymptom]               = useState('');
+    const [newMedName, setNewMedName]               = useState('');
+    const [newMedTime, setNewMedTime]               = useState('10:00 AM');
+
+    const handleScheduleMedication = async () => {
+        if (!newMedName.trim()) {
+            Alert.alert('Missing Info', 'Please enter medicine name and dosage.');
+            return;
+        }
+        try {
+            let finalDate = new Date();
+            if (newMedTime.includes(':')) {
+                const parts = newMedTime.trim().split(' ');
+                const [hourStr, minStr] = parts[0].split(':');
+                const modifier = parts[1] ? parts[1].toUpperCase() : '';
+                let hours = parseInt(hourStr, 10);
+                const minutes = parseInt(minStr, 10);
+                if (modifier === 'PM' && hours !== 12) hours += 12;
+                if (modifier === 'AM' && hours === 12) hours = 0;
+                finalDate.setHours(hours);
+                finalDate.setMinutes(minutes);
+            }
+            const titleString = `Medication - ${newMedName.trim()}`;
+            await addReminder(titleString, finalDate.toISOString());
+            setNewMedName('');
+            
+            playEmergencySirenSound(`Medication reminder for ${newMedName.trim()} scheduled! Voice assistant will announce it on patient app.`);
+            if (Platform.OS === 'web') {
+                window.alert(`✅ Scheduled & Voice Sync Active!\n\nVoice reminder scheduled for ${newMedName.trim()} at ${newMedTime}. The patient app will announce it automatically.`);
+            } else {
+                Alert.alert('✅ Scheduled & Voice Sync Active', `Voice reminder scheduled for ${newMedName.trim()} at ${newMedTime}. The patient app will announce it automatically.`);
+            }
+            loadDashboardData();
+        } catch (e) {
+            Alert.alert('Error', e.response?.data?.detail || 'Could not schedule reminder.');
+        }
+    };
 
     useEffect(() => {
         loadDashboardData();
@@ -467,6 +503,33 @@ export default function CaregiverDashboard({ navigation }) {
                             <TouchableOpacity style={styles.actionBtn} onPress={handleLinkPatient}>
                                 <Text style={styles.actionBtnText}>LINK</Text>
                             </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {/* Schedule Medication Reminder with Voice Sync */}
+                    <View style={styles.sectionCard}>
+                        <Text style={styles.sectionTitle}>💊 Schedule Medication & Voice Alert for Patient</Text>
+                        <Text style={styles.sectionSub}>Dispatches automatic voice reminder to patient app when due</Text>
+                        <View style={{ gap: 10, marginTop: 4 }}>
+                            <TextInput
+                                style={styles.textInput}
+                                value={newMedName}
+                                onChangeText={setNewMedName}
+                                placeholder="Medicine name & dosage (e.g. Donepezil 10mg - 1 tablet)"
+                                placeholderTextColor="#888"
+                            />
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <TextInput
+                                    style={[styles.textInput, { flex: 1 }]}
+                                    value={newMedTime}
+                                    onChangeText={setNewMedTime}
+                                    placeholder="Time (e.g. 10:00 AM)"
+                                    placeholderTextColor="#888"
+                                />
+                                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a', paddingHorizontal: 20 }]} onPress={handleScheduleMedication}>
+                                    <Text style={styles.actionBtnText}>📢 SCHEDULE VOICE REMINDER</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
                 </>

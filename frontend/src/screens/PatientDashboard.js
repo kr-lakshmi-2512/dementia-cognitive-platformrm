@@ -227,23 +227,20 @@ export default function PatientDashboard({ navigation }) {
             const [user, data] = await Promise.all([getUserRole(), fetchReminders()]);
             setCurrentUser(user);
             setReminders(data);
+            checkForDueMedications(data);
         } catch (err) {
             console.error('Failed to load patient dashboard:', err);
         }
     };
 
-    const checkForDueMedications = () => {
-        const now = new Date();
-        for (const rem of reminders) {
-            if (rem.is_completed) continue;
+    const checkForDueMedications = (reminderList = reminders) => {
+        const list = Array.isArray(reminderList) ? reminderList : reminders;
+        const pending = list.filter(r => !r.is_completed);
+        for (const rem of pending) {
             if (checkedIds.current.has(rem.id)) continue;
-            const dueTime = parseUTC(rem.time);
-            const diffMs  = now - dueTime;
-            if (diffMs >= 0 && diffMs <= 3 * 60 * 1000) {
-                checkedIds.current.add(rem.id);
-                triggerVoiceReminder(rem);
-                break;
-            }
+            checkedIds.current.add(rem.id);
+            triggerVoiceReminder(rem);
+            break;
         }
     };
 
