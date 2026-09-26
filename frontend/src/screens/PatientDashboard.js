@@ -205,7 +205,7 @@ export default function PatientDashboard({ navigation }) {
     }, []);
 
     useEffect(() => {
-        const interval = setInterval(checkForDueMedications, 30000);
+        const interval = setInterval(checkForDueMedications, 10000);
         return () => clearInterval(interval);
     }, [reminders]);
 
@@ -235,12 +235,26 @@ export default function PatientDashboard({ navigation }) {
 
     const checkForDueMedications = (reminderList = reminders) => {
         const list = Array.isArray(reminderList) ? reminderList : reminders;
-        const pending = list.filter(r => !r.is_completed);
-        for (const rem of pending) {
+        const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        for (const rem of list) {
+            if (rem.is_completed) continue;
             if (checkedIds.current.has(rem.id)) continue;
-            checkedIds.current.add(rem.id);
-            triggerVoiceReminder(rem);
-            break;
+
+            const scheduledDate = parseUTC(rem.time);
+            const schedHours = scheduledDate.getHours();
+            const schedMinutes = scheduledDate.getMinutes();
+
+            // Trigger strictly when current time reaches the exact scheduled hour & minute
+            const isTimeMatch = (currentHours === schedHours) && Math.abs(currentMinutes - schedMinutes) <= 2;
+
+            if (isTimeMatch) {
+                checkedIds.current.add(rem.id);
+                triggerVoiceReminder(rem);
+                break;
+            }
         }
     };
 
