@@ -24,19 +24,21 @@ class PredictionOutput(BaseModel):
 clf = None
 le = None
 
-@router.on_event("startup")
-def load_ml_components():
+def _load_ml_components():
     global clf, le
-    # Check if files exist before trying to load
+    if clf is not None and le is not None:
+        return True
     if os.path.exists(MODEL_PATH) and os.path.exists(ENCODER_PATH):
         clf = joblib.load(MODEL_PATH)
         le = joblib.load(ENCODER_PATH)
         print("ML Models loaded successfully.")
-    else:
-        print(f"ML Model files not found at {MODEL_PATH}. Prediction endpoints will be disabled until model is trained.")
+        return True
+    print(f"ML Model files not found at {MODEL_PATH}. Prediction endpoints will be disabled until model is trained.")
+    return False
 
 @router.post("/predict-risk", response_model=PredictionOutput)
 def predict_risk(data: PredictionInput):
+    _load_ml_components()
     if clf is None or le is None:
         raise HTTPException(
             status_code=503, 

@@ -151,7 +151,7 @@ export default function MedicationScreen({ navigation }) {
         setReminders(prev => prev.map(r => r.id === item.id ? { ...r, is_completed: newStatus } : r));
 
         if (newStatus) {
-            const spokenMsg = `Medication ${medName} marked as TAKEN for Rachana D N. Daughter Spandana and Caregiver Lakshmi have been notified. Great job!`;
+            const spokenMsg = `Medication ${medName} marked as TAKEN. Caregiver Lakshmi and Dr. Pushpa have been notified. Great job!`;
             speak(spokenMsg);
             showMsg('✅ Medication Marked Taken', spokenMsg);
         } else {

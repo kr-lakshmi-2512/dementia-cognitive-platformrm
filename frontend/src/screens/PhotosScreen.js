@@ -1,542 +1,666 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
-    View, Text, StyleSheet, FlatList, TouchableOpacity,
-    Image, TextInput, Modal, Alert, Platform, ScrollView
+    View, Text, StyleSheet, ScrollView, TouchableOpacity,
+    TextInput, Modal, Platform, ActivityIndicator, Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { fetchPhotos, addPhoto, deletePhoto } from '../api/client';
+
+const SCREEN_H = Dimensions.get('window').height;
+const API      = 'http://localhost:8001/api/v1';
 
 const speak = (text) => {
     if (Platform.OS === 'web' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
-        const utt = new window.SpeechSynthesisUtterance(text);
-        utt.lang = 'en-IN';
-        utt.rate = 0.88;
-        utt.pitch = 1.05;
-        window.speechSynthesis.speak(utt);
+        const u = new window.SpeechSynthesisUtterance(text);
+        u.lang = 'en-IN'; u.rate = 0.88;
+        window.speechSynthesis.speak(u);
     }
 };
 
-const FAMILY_CARE_TEAM = [
-    {
-        id: 'f1',
-        title: 'Spandana',
-        relation: 'Your Loving Daughter',
-        role: 'Daughter',
-        icon: 'heart',
-        iconColor: '#ec4899',
-        desc: 'Your daughter Spandana who checks on your health daily and cares for you deeply.',
-        audioClue: 'This is your daughter Spandana. She loves you very much and checks on your health every day.'
-    },
-    {
-        id: 'f2',
-        title: 'Lakshmi K R',
-        relation: 'Primary Caregiver',
-        role: 'Caregiver',
-        icon: 'shield-checkmark',
-        iconColor: '#16a34a',
-        desc: 'Lakshmi K R lives nearby, manages your daily medication schedules and healthy meals.',
-        audioClue: 'This is Lakshmi K R, your primary caregiver. She helps you with your daily medication and meals.'
-    },
-    {
-        id: 'f3',
-        title: 'Dr. Pushpa H C',
-        relation: 'Specialist Neurologist',
-        role: 'Doctor',
-        icon: 'medkit',
-        iconColor: '#7c3aed',
-        desc: 'Dr. Pushpa H C oversees your neurological wellness, care plan, and daily health.',
-        audioClue: 'This is Dr. Pushpa H C, your doctor who oversees your health and daily care plan.'
-    }
-];
+const MEMBERS_KEY = 'fmd_members_v6';
+const rd = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+/* Capture video → JPEG Blob */
+const captureBlob = (videoEl) => new Promise((resolve) => {
+    const w = videoEl.videoWidth  || 640;
+    const h = videoEl.videoHeight || 480;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(videoEl, 0, 0, w, h);
+    c.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92);
+});
+
+/* Capture video → data URL for preview */
+const captureDataURL = (videoEl) => {
+    const w = videoEl.videoWidth  || 640;
+    const h = videoEl.videoHeight || 480;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(videoEl, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', 0.92);
+};
+
+const ICON_COLORS = ['#7c3aed','#16a34a','#dc2626','#d97706','#0284c7','#db2777','#065f46','#1d4ed8'];
 
 export default function PhotosScreen({ navigation }) {
-    const [members, setMembers]                 = useState(FAMILY_CARE_TEAM);
-    const [modalVisible, setModalVisible]       = useState(false);
-    const [scanModal, setScanModal]             = useState(false);
-    const [cameraModal, setCameraModal]         = useState(false);
-    const [scannedPerson, setScannedPerson]     = useState(null);
-    const [isScanningLive, setIsScanningLive]   = useState(false);
-    const [scanConfidence, setScanConfidence]   = useState(0);
-    const scanIndexRef                          = useRef(0);
+    const [members,    setMembers]    = useState([]);
+    const [enrolled,   setEnrolled]   = useState({});
 
-    const [newTitle, setNewTitle]               = useState('');
-    const [newRelation, setNewRelation]         = useState('');
+    /* ── Scan modal ── */
+    const [scanModal,   setScanModal]   = useState(false);
+    const [scanning,    setScanning]    = useState(false);
+    const [scanStatus,  setScanStatus]  = useState('');
+    const [scanResult,  setScanResult]  = useState(null);   // null | result obj
 
-    const videoRef = useRef(null);
+    /* ── Add-Person modal (with built-in camera) ── */
+    const [addModal,     setAddModal]    = useState(false);
+    const [addStep,      setAddStep]     = useState('form'); // 'form' | 'camera' | 'preview'
+    const [fname,        setFname]       = useState('');
+    const [frel,         setFrel]        = useState('');
+    const [fdesc,        setFdesc]       = useState('');
+    const [capturedBlob, setCapturedBlob] = useState(null);
+    const [capturedURL,  setCapturedURL]  = useState(null);
+    const [saving,       setSaving]      = useState(false);
+
+    const scanVideoRef = useRef(null);
+    const addVideoRef  = useRef(null);
 
     useEffect(() => {
-        loadPhotos();
+        const saved = rd(MEMBERS_KEY);
+        if (Array.isArray(saved)) setMembers(saved);
+        refreshEnrolled();
     }, []);
 
-    const loadPhotos = async () => {
+    const refreshEnrolled = async () => {
         try {
-            const data = await fetchPhotos();
-            if (Array.isArray(data) && data.length > 0) {
-                const normalizedCustom = data
-                    .filter(d => d && d.title && typeof d.title === 'string')
-                    .filter(d => !d.title.includes('Spandana') && !d.title.includes('Lakshmi') && !d.title.includes('Pushpa'))
-                    .map(d => ({
-                        id: d.id || Date.now().toString(),
-                        title: d.title || 'Family Member',
-                        relation: d.description || 'Family Relation',
-                        role: 'Family',
-                        icon: 'person',
-                        iconColor: '#3b82f6',
-                        desc: d.description || `Registered family member ${d.title}`,
-                        audioClue: `This is ${d.title}.`
-                    }));
-                setMembers([...FAMILY_CARE_TEAM, ...normalizedCustom]);
-            } else {
-                setMembers(FAMILY_CARE_TEAM);
+            const r = await fetch(`${API}/face/enrolled`);
+            if (r.ok) {
+                const data = await r.json();
+                const map = {};
+                (data.enrolled || []).forEach(e => { map[e.member_id] = e; });
+                setEnrolled(map);
             }
-        } catch {
-            setMembers(FAMILY_CARE_TEAM);
+        } catch (_) {}
+    };
+
+    /* ── Camera helpers ── */
+    const startCam = (ref) => {
+        if (Platform.OS !== 'web') return;
+        navigator.mediaDevices?.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
+            .then(s => { if (ref.current) ref.current.srcObject = s; })
+            .catch(e => window.alert('Camera error: ' + e.message));
+    };
+    const stopCam = (ref) => {
+        if (ref.current?.srcObject) {
+            ref.current.srcObject.getTracks().forEach(t => t.stop());
+            ref.current.srcObject = null;
         }
     };
 
-    const stopWebcam = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            const stream = videoRef.current.srcObject;
-            const tracks = stream.getTracks();
-            tracks.forEach(track => track.stop());
-            videoRef.current.srcObject = null;
-        }
-    };
-
-    const [targetPerson, setTargetPerson]       = useState(null);
-
-    const handleOpenLiveCamera = (personToScan = null) => {
-        if (personToScan && personToScan.title) {
-            setTargetPerson(personToScan);
-        } else {
-            setTargetPerson(null); // Auto-cycle mode across all team members
-        }
-        setCameraModal(true);
-        if (Platform.OS === 'web' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(stream => {
-                    if (videoRef.current) {
-                        videoRef.current.srcObject = stream;
-                    }
-                })
-                .catch(err => {
-                    console.log('Webcam note:', err);
-                });
-        }
-    };
-
-    const handleCloseLiveCamera = () => {
-        stopWebcam();
-        setCameraModal(false);
-        setIsScanningLive(false);
-    };
-
-    // Camera Scan Action: Identifies specific target person or cycles members sequentially
-    const handleCaptureAndIdentify = () => {
-        setIsScanningLive(true);
-        setTimeout(() => {
-            stopWebcam(); // 🔴 Stop camera hardware!
-            setCameraModal(false); // 🔴 Close camera modal!
-            setIsScanningLive(false);
-
-            const allMembers = (members && members.length > 0) ? members : FAMILY_CARE_TEAM;
-            let rawMatched;
-
-            if (targetPerson && targetPerson.title) {
-                rawMatched = targetPerson;
-            } else {
-                // Auto cycle through registered members (Spandana -> Lakshmi -> Dr. Pushpa)
-                const idx = scanIndexRef.current % allMembers.length;
-                scanIndexRef.current += 1;
-                rawMatched = allMembers[idx];
-            }
-
-            const matched = {
-                id: rawMatched?.id || 'f1',
-                title: rawMatched?.title || 'Spandana',
-                relation: rawMatched?.relation || 'Your Loving Daughter',
-                role: rawMatched?.role || 'Daughter',
-                icon: rawMatched?.icon || 'heart',
-                iconColor: rawMatched?.iconColor || '#ec4899',
-                desc: rawMatched?.desc || 'Your daughter Spandana who checks on your health daily.',
-                audioClue: rawMatched?.audioClue || `This is ${rawMatched?.title || 'Spandana'}, ${rawMatched?.relation || 'your daughter'}.`
-            };
-
-            const confidence = (98.2 + Math.random() * 1.5).toFixed(1);
-
-            setScanConfidence(confidence);
-            setScannedPerson(matched);
-            setScanModal(true);
-            speak(matched.audioClue);
-        }, 1200);
-    };
-
-    const handleSaveMember = async () => {
-        if (!newTitle.trim()) {
-            if (Platform.OS === 'web') window.alert('Please enter a person name.');
-            else Alert.alert('Missing Info', 'Please enter a person name.');
-            return;
-        }
-        const newMember = {
-            id: Date.now().toString(),
-            title: newTitle.trim(),
-            relation: newRelation.trim() || 'Family Member',
-            role: 'Family',
-            icon: 'person',
-            iconColor: '#3b82f6',
-            desc: `Added family member ${newTitle.trim()}.`,
-            audioClue: `This is ${newTitle.trim()}.`
-        };
-        setMembers(prev => [...prev, newMember]);
-        setNewTitle('');
-        setNewRelation('');
-        setModalVisible(false);
-    };
-
-    const handleDeleteMember = (memberId) => {
-        setMembers(prev => prev.filter(m => m.id !== memberId));
-    };
-
-    const handleIdentifyCard = (person) => {
-        setScannedPerson(person);
+    /* ══════════════════════════════
+       SCAN FLOW
+    ══════════════════════════════ */
+    const openScan = () => {
+        setScanResult(null); setScanStatus('');
         setScanModal(true);
-        speak(person.audioClue || `This is ${person.title}.`);
+        setTimeout(() => startCam(scanVideoRef), 500);
+    };
+    const closeScan = () => { stopCam(scanVideoRef); setScanModal(false); setScanning(false); setScanStatus(''); };
+
+    const handleScan = async () => {
+        if (!scanVideoRef.current) return;
+        setScanning(true); setScanStatus('Capturing…');
+        try {
+            const blob = await captureBlob(scanVideoRef.current);
+            stopCam(scanVideoRef);
+            setScanStatus('Analyzing face…');
+            const form = new FormData();
+            form.append('file', blob, 'frame.jpg');
+            const res  = await fetch(`${API}/face/recognize`, { method: 'POST', body: form });
+            const data = await res.json();
+            setScanning(false); setScanStatus('');
+
+            if (data.status === 'recognized') {
+                const member = members.find(m => m.id === data.member_id);
+                setScanResult({ type: 'known', name: data.member_name, member, confidence: data.confidence });
+                speak(`Recognized. This is ${data.member_name}.` + (member?.relation ? ` ${member.relation}.` : ''));
+            } else if (data.status === 'no_face') {
+                setScanResult({ type: 'no_face' });
+                speak('No face detected. Please face the camera directly.');
+            } else {
+                setScanResult({ type: 'unknown' });
+                speak('Not recognized. Please register.');
+            }
+        } catch (e) {
+            setScanning(false); setScanStatus('');
+            window.alert('Error: ' + e.message + '\n\nMake sure the backend server is running.');
+            closeScan();
+        }
     };
 
+    /* ══════════════════════════════
+       ADD PERSON FLOW (3 steps)
+       Step 1: fill form
+       Step 2: take photo
+       Step 3: preview → save
+    ══════════════════════════════ */
+    const openAdd = (fromUnknown = false) => {
+        setFname(''); setFrel(''); setFdesc('');
+        setCapturedBlob(null); setCapturedURL(null);
+        setAddStep('form');
+        setScanModal(false);
+        setAddModal(true);
+    };
+
+    const goToCamera = () => {
+        if (!fname.trim()) { window.alert('Please enter the person\'s name first.'); return; }
+        setAddStep('camera');
+        setTimeout(() => startCam(addVideoRef), 500);
+    };
+
+    const takePhoto = async () => {
+        if (!addVideoRef.current) return;
+        const blob = await captureBlob(addVideoRef.current);
+        const url  = captureDataURL(addVideoRef.current);
+        stopCam(addVideoRef);
+        setCapturedBlob(blob);
+        setCapturedURL(url);
+        setAddStep('preview');
+    };
+
+    const retakePhoto = () => {
+        setCapturedBlob(null); setCapturedURL(null);
+        setAddStep('camera');
+        setTimeout(() => startCam(addVideoRef), 400);
+    };
+
+    const savePerson = async () => {
+        if (!capturedBlob) { window.alert('Please take a photo first.'); return; }
+        setSaving(true);
+        const id = `m_${Date.now()}`;
+        const colorIdx = members.length % ICON_COLORS.length;
+        const member = {
+            id,
+            name:     fname.trim(),
+            relation: frel.trim() || 'Family Member',
+            desc:     fdesc.trim() || `${fname.trim()} is a registered family member.`,
+            color:    ICON_COLORS[colorIdx],
+            icon:     'person',
+        };
+
+        /* Register face on backend */
+        try {
+            const form = new FormData();
+            form.append('file', capturedBlob, 'face.jpg');
+            form.append('member_id', id);
+            form.append('member_name', fname.trim());
+            const res = await fetch(`${API}/face/register`, { method: 'POST', body: form });
+            if (!res.ok) {
+                const err = await res.json();
+                window.alert('Face register warning: ' + (err.message || err.detail));
+            }
+        } catch (e) {
+            window.alert('Could not save face to backend: ' + e.message);
+        }
+
+        /* Save member locally */
+        const upd = [...members, member];
+        setMembers(upd); wr(MEMBERS_KEY, upd);
+        await refreshEnrolled();
+        setSaving(false);
+        setAddModal(false);
+        speak(`${fname.trim()} has been added and their face registered. You can now scan them.`);
+    };
+
+    const closeAdd = () => {
+        stopCam(addVideoRef);
+        setAddModal(false);
+    };
+
+    /* ── Delete ── */
+    const handleDeleteMember = async (id, name) => {
+        if (!window.confirm(`Remove ${name} from the directory?`)) return;
+        try { await fetch(`${API}/face/${id}`, { method: 'DELETE' }); } catch (_) {}
+        const upd = members.filter(m => m.id !== id);
+        setMembers(upd); wr(MEMBERS_KEY, upd);
+        await refreshEnrolled();
+    };
+
+    const handleClearAll = async () => {
+        if (!window.confirm('Delete ALL members and face data?')) return;
+        for (const m of members) {
+            try { await fetch(`${API}/face/${m.id}`, { method: 'DELETE' }); } catch (_) {}
+        }
+        setMembers([]); wr(MEMBERS_KEY, []); setEnrolled({});
+    };
+
+    /* ══════════════════════════════════════════
+       RENDER
+    ══════════════════════════════════════════ */
     return (
-        <LinearGradient colors={['#1e1b4b', '#0f172a']} style={styles.container}>
+        <View style={[styles.root, { height: SCREEN_H }]}>
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={28} color="#1f1545" />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hBtn}>
+                    <Ionicons name="arrow-back" size={24} color="#1f1545" />
                 </TouchableOpacity>
                 <View style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={styles.headerTitle}>Family & Care Team Directory</Text>
-                    <Text style={styles.headerSub}>Spandana (Daughter), Lakshmi K R (Caregiver), Dr. Pushpa (Doctor)</Text>
+                    <Text style={styles.hTitle}>🧠 Family Memory Directory</Text>
+                    <Text style={styles.hSub}>{members.length} people · {Object.keys(enrolled).length} faces registered</Text>
                 </View>
-                <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.addBtn}>
-                    <Ionicons name="add" size={30} color="#1f1545" />
+                <TouchableOpacity onPress={handleClearAll} style={[styles.hBtn, { backgroundColor: '#fee2e2', marginRight: 6 }]}>
+                    <Ionicons name="trash" size={20} color="#dc2626" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openAdd()} style={styles.hBtn}>
+                    <Ionicons name="person-add" size={22} color="#1f1545" />
                 </TouchableOpacity>
             </View>
 
-            {/* Main AI Camera Scanner Hero Card */}
-            <View style={styles.heroCard}>
-                <View style={styles.heroHeader}>
-                    <Ionicons name="aperture" size={40} color="#7c3aed" />
-                    <View style={{ flex: 1, marginLeft: 14 }}>
-                        <Text style={styles.heroTitle}>📷 Live Camera Face Scanner</Text>
-                        <Text style={styles.heroSub}>Open live webcam to scan & identify anyone standing in front of you!</Text>
-                    </View>
-                </View>
+            {/* Scroll content */}
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
 
-                <TouchableOpacity style={styles.heroScanBtn} onPress={handleOpenLiveCamera}>
+                {/* SCAN hero button */}
+                <TouchableOpacity style={styles.heroBtn} onPress={openScan}>
                     <Ionicons name="scan-circle" size={28} color="white" />
-                    <Text style={styles.heroScanBtnText}> OPEN CAMERA & SCAN PERSON</Text>
+                    <Text style={styles.heroBtnTxt}>  📷 OPEN CAMERA & SCAN FACE</Text>
                 </TouchableOpacity>
-            </View>
 
-            {/* Live Camera Viewfinder Modal */}
-            <Modal visible={cameraModal} transparent animationType="slide">
-                <View style={styles.cameraModalOverlay}>
-                    <View style={styles.cameraCard}>
-                        <Text style={styles.cameraModalTitle}>📷 Live AI Face Recognition Camera</Text>
-                        <Text style={styles.cameraModalSub}>Select person standing in front of camera to identify:</Text>
+                {/* How it works */}
+                <View style={styles.stepsCard}>
+                    <Text style={styles.stepsTitle}>📋 How it works</Text>
+                    <Text style={styles.stepRow}>1️⃣  Tap ➕ to add a person → fill name → take their photo → Save</Text>
+                    <Text style={styles.stepRow}>2️⃣  Tap <Text style={{ fontWeight: 'bold' }}>SCAN FACE</Text> above → point at them → Identify instantly ✅</Text>
+                </View>
 
-                        {/* Person Selection Bar in Camera Modal */}
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                {members.map(m => (
+                {/* Empty state */}
+                {members.length === 0 && (
+                    <View style={styles.emptyCard}>
+                        <Ionicons name="people-outline" size={52} color="#a78bfa" />
+                        <Text style={styles.emptyTitle}>No People Registered Yet</Text>
+                        <Text style={styles.emptySub}>Tap ➕ above to add someone with their photo.</Text>
+                        <TouchableOpacity style={styles.emptyBtn} onPress={() => openAdd()}>
+                            <Ionicons name="person-add" size={18} color="white" />
+                            <Text style={styles.emptyBtnTxt}>  Add First Person</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {members.length > 0 && (
+                    <Text style={styles.section}>👥 Registered People ({members.length})</Text>
+                )}
+
+                {members.map(item => (
+                    <View key={item.id} style={styles.card}>
+                        <View style={styles.cardTop}>
+                            <View style={[styles.avatar, { backgroundColor: item.color }]}>
+                                <Ionicons name="person" size={26} color="white" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={styles.cardName}>{item.name}</Text>
+                                <Text style={[styles.cardRel, { color: item.color }]}>{item.relation}</Text>
+                                <View style={styles.faceTag}>
+                                    <Ionicons
+                                        name={enrolled[item.id] ? 'checkmark-circle' : 'alert-circle'}
+                                        size={13}
+                                        color={enrolled[item.id] ? '#16a34a' : '#f59e0b'}
+                                    />
+                                    <Text style={{ fontSize: 11, color: enrolled[item.id] ? '#16a34a' : '#f59e0b', marginLeft: 4 }}>
+                                        {enrolled[item.id] ? 'Face registered ✓' : 'No face — tap Update Photo'}
+                                    </Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteMember(item.id, item.name)}>
+                                <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={styles.cardDesc}>{item.desc}</Text>
+                        <View style={styles.cardBtns}>
+                            <TouchableOpacity style={[styles.btn, { backgroundColor: item.color }]}
+                                onPress={() => speak(`This is ${item.name}. ${item.relation}. ${item.desc}`)}>
+                                <Ionicons name="volume-high" size={15} color="white" />
+                                <Text style={styles.btnTxt}>  Hear Info</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.btn, { backgroundColor: '#6b7280' }]}
+                                onPress={() => {
+                                    setFname(item.name); setFrel(item.relation); setFdesc(item.desc);
+                                    setCapturedBlob(null); setCapturedURL(null);
+                                    setAddStep('camera'); setAddModal(true);
+                                    setTimeout(() => startCam(addVideoRef), 500);
+                                }}>
+                                <Ionicons name="camera" size={15} color="white" />
+                                <Text style={styles.btnTxt}>  Update Photo</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ))}
+
+                <View style={{ height: 60 }} />
+            </ScrollView>
+
+            {/* ════ SCAN MODAL ════ */}
+            <Modal visible={scanModal} transparent animationType="slide">
+                <View style={styles.overlay}>
+                    <View style={styles.camBox}>
+
+                        {!scanResult ? (
+                            /* Camera view */
+                            <>
+                                <Text style={styles.camTitle}>🔍 Scan Face</Text>
+                                <Text style={styles.camSub}>Point camera at the person and tap IDENTIFY</Text>
+
+                                <View style={styles.finder}>
+                                    {Platform.OS === 'web'
+                                        ? <video ref={scanVideoRef} autoPlay playsInline muted
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        : <View style={styles.finderPh}><Ionicons name="camera" size={58} color="#a78bfa" /></View>
+                                    }
+                                    <View style={styles.reticle} />
+                                    {scanning && (
+                                        <View style={styles.scanLayer}>
+                                            <ActivityIndicator size="large" color="#4ade80" />
+                                            <Text style={styles.scanTxt}>{scanStatus}</Text>
+                                        </View>
+                                    )}
+                                </View>
+
+                                <View style={styles.camBtns}>
+                                    <TouchableOpacity style={styles.camCancel} onPress={closeScan} disabled={scanning}>
+                                        <Text style={{ color: 'white', fontWeight: 'bold' }}>CANCEL</Text>
+                                    </TouchableOpacity>
                                     <TouchableOpacity
-                                        key={m.id}
-                                        style={[
-                                            styles.personPill,
-                                            targetPerson?.id === m.id && styles.personPillActive
-                                        ]}
-                                        onPress={() => setTargetPerson(m)}
-                                    >
-                                        <Text style={[
-                                            styles.personPillText,
-                                            targetPerson?.id === m.id && styles.personPillTextActive
-                                        ]}>
-                                            {m.title} ({m.role})
+                                        style={[styles.camAction, scanning && { opacity: 0.5 }]}
+                                        onPress={handleScan} disabled={scanning}>
+                                        <Ionicons name="scan" size={20} color="white" />
+                                        <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 6 }}>
+                                            {scanning ? 'Analyzing…' : 'IDENTIFY'}
                                         </Text>
                                     </TouchableOpacity>
-                                ))}
-                            </View>
-                        </ScrollView>
-
-                        <View style={styles.viewfinderFrame}>
-                            {Platform.OS === 'web' ? (
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                />
-                            ) : (
-                                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                                    <Ionicons name="camera" size={64} color="#a78bfa" />
-                                    <Text style={{ color: 'white', marginTop: 10 }}>Camera Viewfinder Active</Text>
                                 </View>
-                            )}
-                            <View style={styles.reticleRing} />
-                        </View>
+                            </>
+                        ) : (
+                            /* Result view */
+                            <>
+                                {scanResult.type === 'known' && (
+                                    <>
+                                        <Text style={styles.resultEmoji}>✅</Text>
+                                        <View style={[styles.resultBadge, { backgroundColor: '#d1fae5' }]}>
+                                            <Text style={{ color: '#065f46', fontWeight: 'bold', fontSize: 12 }}>
+                                                RECOGNIZED  ({scanResult.confidence}% match)
+                                            </Text>
+                                        </View>
+                                        <View style={[styles.bigIcon, { backgroundColor: scanResult.member?.color || '#16a34a' }]}>
+                                            <Ionicons name="person" size={50} color="white" />
+                                        </View>
+                                        <Text style={styles.rName}>{scanResult.name}</Text>
+                                        {scanResult.member?.relation && (
+                                            <Text style={[styles.rRel, { color: scanResult.member.color }]}>
+                                                {scanResult.member.relation}
+                                            </Text>
+                                        )}
+                                        {scanResult.member?.desc && (
+                                            <Text style={styles.rDesc}>{scanResult.member.desc}</Text>
+                                        )}
+                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
+                                            onPress={() => speak(`This is ${scanResult.name}. ${scanResult.member?.relation || ''}. ${scanResult.member?.desc || ''}`)}>
+                                            <Ionicons name="volume-high" size={18} color="white" />
+                                            <Text style={styles.rBtnTxt}>  🔊 READ ALOUD</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
 
-                        <Text style={{ color: '#4ade80', fontWeight: 'bold', marginTop: 12, fontSize: 15, textAlign: 'center' }}>
-                            Target: {targetPerson ? `${targetPerson.title} (${targetPerson.relation})` : 'Auto AI Detection (Sequentially Scans Registered Team)'}
-                        </Text>
+                                {scanResult.type === 'unknown' && (
+                                    <>
+                                        <Text style={styles.resultEmoji}>❓</Text>
+                                        <View style={[styles.resultBadge, { backgroundColor: '#fee2e2' }]}>
+                                            <Text style={{ color: '#991b1b', fontWeight: 'bold', fontSize: 13 }}>
+                                                ❓ NOT RECOGNIZED
+                                            </Text>
+                                        </View>
+                                        <View style={[styles.bigIcon, { backgroundColor: '#6b7280' }]}>
+                                            <Ionicons name="person-outline" size={50} color="white" />
+                                        </View>
+                                        <Text style={styles.rName}>Not Recognized</Text>
+                                        <Text style={styles.rDesc}>
+                                            This person is not registered in the directory.{'\n\n'}
+                                            👉 Please tap <Text style={{ fontWeight: 'bold' }}>REGISTER</Text> below to add them.
+                                        </Text>
+                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#7c3aed' }]}
+                                            onPress={() => openAdd(true)}>
+                                            <Ionicons name="person-add" size={18} color="white" />
+                                            <Text style={styles.rBtnTxt}>  PLEASE REGISTER</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
 
-                        <View style={styles.cameraActionRow}>
-                            <TouchableOpacity style={styles.closeCameraBtn} onPress={handleCloseLiveCamera}>
-                                <Text style={styles.closeCameraText}>CANCEL</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={styles.captureBtn}
-                                onPress={handleCaptureAndIdentify}
-                                disabled={isScanningLive}
-                            >
-                                <Ionicons name="scan-circle" size={24} color="white" />
-                                <Text style={styles.captureBtnText}>
-                                    {isScanningLive ? 'IDENTIFYING…' : 'IDENTIFY FACE & SPEAK'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
+                                {scanResult.type === 'no_face' && (
+                                    <>
+                                        <Text style={styles.resultEmoji}>⚠️</Text>
+                                        <View style={[styles.resultBadge, { backgroundColor: '#fef3c7' }]}>
+                                            <Text style={{ color: '#92400e', fontWeight: 'bold', fontSize: 12 }}>
+                                                NO FACE DETECTED
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.rName}>No Face Found</Text>
+                                        <Text style={styles.rDesc}>
+                                            • Face the camera directly{'\n'}
+                                            • Ensure good lighting{'\n'}
+                                            • Move closer
+                                        </Text>
+                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
+                                            onPress={() => { setScanResult(null); setTimeout(() => startCam(scanVideoRef), 400); }}>
+                                            <Ionicons name="camera" size={18} color="white" />
+                                            <Text style={styles.rBtnTxt}>  TRY AGAIN</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
+
+                                <TouchableOpacity style={{ marginTop: 14 }} onPress={closeScan}>
+                                    <Text style={{ color: '#888', fontWeight: 'bold', textAlign: 'center' }}>CLOSE</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>
 
-            {/* AI Identity Matched Result Modal */}
-            <Modal visible={scanModal} transparent animationType="fade">
-                <View style={styles.scanModalOverlay}>
-                    <View style={styles.scanCard}>
-                        <View style={styles.scanBadge}>
-                            <Ionicons name="checkmark-circle" size={28} color="#16a34a" />
-                            <Text style={styles.scanBadgeText}>AI IDENTITY RECOGNIZED ({scanConfidence || '99.2'}%)</Text>
-                        </View>
+            {/* ════ ADD PERSON MODAL (3-step) ════ */}
+            <Modal visible={addModal} transparent animationType="slide">
+                <View style={styles.overlay}>
+                    <View style={styles.formBox}>
 
-                        {scannedPerson && (
+                        {/* ── Step 1: Form ── */}
+                        {addStep === 'form' && (
                             <>
-                                <View style={[styles.scanIconCircle, { backgroundColor: scannedPerson.iconColor || '#7c3aed' }]}>
-                                    <Ionicons name={scannedPerson.icon || 'person'} size={60} color="white" />
-                                </View>
-                                <Text style={styles.scanPersonName}>{scannedPerson.title}</Text>
-                                <Text style={styles.scanPersonRelation}>{scannedPerson.relation}</Text>
-                                <Text style={styles.scanPersonDesc}>{scannedPerson.desc}</Text>
+                                <Text style={styles.formTitle}>➕ Add Person</Text>
+                                <Text style={styles.formSub}>Fill in the details, then take their photo.</Text>
+
+                                <Text style={styles.label}>Full Name *</Text>
+                                <TextInput style={styles.input} placeholder="e.g. Rachana" placeholderTextColor="#aaa"
+                                    value={fname} onChangeText={setFname} />
+
+                                <Text style={styles.label}>Relationship / Role</Text>
+                                <TextInput style={styles.input} placeholder="e.g. Daughter / Son / Caregiver"
+                                    placeholderTextColor="#aaa" value={frel} onChangeText={setFrel} />
+
+                                <Text style={styles.label}>About them (optional)</Text>
+                                <TextInput style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
+                                    placeholder="Short description…" placeholderTextColor="#aaa"
+                                    multiline value={fdesc} onChangeText={setFdesc} />
+
+                                <TouchableOpacity style={styles.nextBtn} onPress={goToCamera}>
+                                    <Ionicons name="camera" size={20} color="white" />
+                                    <Text style={styles.nextBtnTxt}>  NEXT: TAKE PHOTO</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={closeAdd}>
+                                    <Text style={{ color: '#888', fontWeight: 'bold' }}>CANCEL</Text>
+                                </TouchableOpacity>
                             </>
                         )}
 
-                        <TouchableOpacity
-                            style={styles.speakBtn}
-                            onPress={() => speak(scannedPerson?.audioClue || `This is ${scannedPerson?.title}`)}
-                        >
-                            <Ionicons name="volume-high" size={26} color="white" />
-                            <Text style={styles.speakBtnText}> Speak Identity Out Loud</Text>
-                        </TouchableOpacity>
+                        {/* ── Step 2: Camera ── */}
+                        {addStep === 'camera' && (
+                            <>
+                                <Text style={styles.formTitle}>📸 Take Photo</Text>
+                                <Text style={styles.formSub}>
+                                    {fname} — look straight at the camera{'\n'}with good lighting, then tap CAPTURE
+                                </Text>
 
-                        <TouchableOpacity style={styles.closeScanBtn} onPress={() => setScanModal(false)}>
-                            <Text style={styles.closeScanText}>CLOSE WINDOW</Text>
-                        </TouchableOpacity>
+                                <View style={styles.finder}>
+                                    {Platform.OS === 'web'
+                                        ? <video ref={addVideoRef} autoPlay playsInline muted
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        : <View style={styles.finderPh}><Ionicons name="camera" size={58} color="#a78bfa" /></View>
+                                    }
+                                    <View style={styles.reticle} />
+                                </View>
+
+                                <View style={styles.camBtns}>
+                                    <TouchableOpacity style={styles.camCancel}
+                                        onPress={() => { stopCam(addVideoRef); setAddStep('form'); }}>
+                                        <Text style={{ color: 'white', fontWeight: 'bold' }}>← BACK</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.camAction} onPress={takePhoto}>
+                                        <Ionicons name="radio-button-on" size={20} color="white" />
+                                        <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 6 }}>CAPTURE</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+
+                        {/* ── Step 3: Preview ── */}
+                        {addStep === 'preview' && (
+                            <>
+                                <Text style={styles.formTitle}>✅ Photo Captured!</Text>
+                                <Text style={styles.formSub}>Adding: <Text style={{ fontWeight: 'bold' }}>{fname}</Text></Text>
+
+                                {capturedURL && Platform.OS === 'web' && (
+                                    <img src={capturedURL} alt="preview"
+                                        style={{ width: 200, height: 200, borderRadius: 100, objectFit: 'cover',
+                                            alignSelf: 'center', marginVertical: 12, border: '3px solid #7c3aed' }} />
+                                )}
+
+                                {saving ? (
+                                    <View style={{ alignItems: 'center', marginTop: 12 }}>
+                                        <ActivityIndicator size="large" color="#7c3aed" />
+                                        <Text style={{ color: '#7c3aed', marginTop: 8 }}>Registering face…</Text>
+                                    </View>
+                                ) : (
+                                    <>
+                                        <TouchableOpacity style={styles.nextBtn} onPress={savePerson}>
+                                            <Ionicons name="checkmark-circle" size={20} color="white" />
+                                            <Text style={styles.nextBtnTxt}>  SAVE & REGISTER</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity style={[styles.nextBtn, { backgroundColor: '#6b7280', marginTop: 8 }]}
+                                            onPress={retakePhoto}>
+                                            <Ionicons name="refresh" size={18} color="white" />
+                                            <Text style={styles.nextBtnTxt}>  RETAKE PHOTO</Text>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
+                                <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={closeAdd}>
+                                    <Text style={{ color: '#888', fontWeight: 'bold' }}>CANCEL</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>
-
-            {/* Clean Family & Care Team Directory List (No Stock Photos!) */}
-            <FlatList
-                contentContainerStyle={styles.content}
-                data={members}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={({ item }) => (
-                    <View style={styles.memberCard}>
-                        <View style={styles.memberHeader}>
-                            <View style={[styles.roleIconCircle, { backgroundColor: item.iconColor || '#7c3aed' }]}>
-                                <Ionicons name={item.icon || 'person'} size={32} color="white" />
-                            </View>
-
-                            <View style={{ flex: 1, marginLeft: 16 }}>
-                                <Text style={styles.memberName}>{item.title}</Text>
-                                <Text style={[styles.memberRelation, { color: item.iconColor || '#7c3aed' }]}>{item.relation}</Text>
-                            </View>
-
-                            <TouchableOpacity onPress={() => handleDeleteMember(item.id)} style={styles.trashBtn}>
-                                <Ionicons name="trash-outline" size={22} color="#dc2626" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <Text style={styles.memberDesc}>{item.desc}</Text>
-
-                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                            <TouchableOpacity
-                                style={[styles.cardIdentifyBtn, { flex: 1.3, backgroundColor: '#16a34a' }]}
-                                onPress={() => handleOpenLiveCamera(item)}
-                            >
-                                <Ionicons name="camera" size={20} color="white" />
-                                <Text style={styles.cardIdentifyText}> SCAN FACE</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.cardIdentifyBtn, { flex: 1, backgroundColor: item.iconColor || '#7c3aed' }]}
-                                onPress={() => handleIdentifyCard(item)}
-                            >
-                                <Ionicons name="volume-high" size={20} color="white" />
-                                <Text style={styles.cardIdentifyText}> HEAR INFO</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                )}
-            />
-
-            {/* Add Family Member Modal */}
-            <Modal visible={modalVisible} transparent animationType="slide">
-                <View style={styles.modalBackdrop}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Add Family Member</Text>
-
-                        <Text style={styles.label}>Person Full Name</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. Daughter Rachana D N"
-                            placeholderTextColor="#888"
-                            value={newTitle}
-                            onChangeText={setNewTitle}
-                        />
-
-                        <Text style={styles.label}>Relationship / Role</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="e.g. Daughter / Caregiver / Doctor"
-                            placeholderTextColor="#888"
-                            value={newRelation}
-                            onChangeText={setNewRelation}
-                        />
-
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
-                                <Text style={styles.cancelText}>CANCEL</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMember}>
-                                <Text style={styles.saveText}>SAVE PERSON</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-        </LinearGradient>
+        </View>
     );
 }
 
+/* ══════════════ STYLES ══════════════ */
+const C = { purple: '#7c3aed', green: '#16a34a', bg: '#1e1b4b' };
+
 const styles = StyleSheet.create({
-    container: { flex: 1 },
+    root:   { flex: 1, backgroundColor: C.bg, overflow: 'hidden' },
+
     header: {
-        paddingTop: 55, paddingBottom: 22, paddingHorizontal: 24,
-        backgroundColor: 'white', borderBottomLeftRadius: 28, borderBottomRightRadius: 28,
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5
-    },
-    backBtn: { padding: 10, backgroundColor: '#f0ebff', borderRadius: 16 },
-    addBtn: { padding: 10, backgroundColor: '#f0ebff', borderRadius: 16 },
-    container: { flex: 1 },
-    header: {
-        paddingTop: 50, paddingBottom: 16, paddingHorizontal: 18,
+        paddingTop: 50, paddingBottom: 14, paddingHorizontal: 16,
         backgroundColor: 'white', borderBottomLeftRadius: 20, borderBottomRightRadius: 20,
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 4
+        flexDirection: 'row', alignItems: 'center',
+        shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 8, elevation: 5,
     },
-    backBtn: { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
-    addBtn: { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
-    headerTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f1545' },
-    headerSub: { fontSize: 12, color: '#64748b', marginTop: 2 },
+    hBtn:   { padding: 8, backgroundColor: '#f0ebff', borderRadius: 12 },
+    hTitle: { fontSize: 15, fontWeight: 'bold', color: '#1f1545' },
+    hSub:   { fontSize: 11, color: '#64748b', marginTop: 2 },
 
-    heroCard: {
-        backgroundColor: 'white', marginHorizontal: 16, marginTop: 16,
-        borderRadius: 20, padding: 18,
-        shadowColor: '#7c3aed', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4
-    },
-    heroHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-    heroTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f1545' },
-    heroSub: { fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 17 },
-    heroScanBtn: {
-        backgroundColor: '#7c3aed', paddingVertical: 14, borderRadius: 16,
-        flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
-    },
-    heroScanBtnText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+    scrollContent: { padding: 16, paddingBottom: 80 },
 
-    content: { padding: 16, paddingBottom: 80 },
+    heroBtn:    { backgroundColor: C.purple, paddingVertical: 18, borderRadius: 18,
+                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+                  marginBottom: 14, shadowColor: C.purple, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+    heroBtnTxt: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
-    memberCard: {
-        backgroundColor: 'white', borderRadius: 20, marginBottom: 14,
-        padding: 18, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 4
-    },
-    memberHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-    roleIconCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    memberName: { fontSize: 16, fontWeight: 'bold', color: '#1f1545' },
-    memberRelation: { fontSize: 13, fontWeight: 'bold', marginTop: 2 },
-    memberDesc: { fontSize: 12, color: '#4b5563', lineHeight: 17, marginBottom: 14 },
+    stepsCard:  { backgroundColor: '#f5f3ff', borderRadius: 14, padding: 14, marginBottom: 16,
+                  borderWidth: 1, borderColor: '#ddd6fe' },
+    stepsTitle: { fontSize: 13, fontWeight: 'bold', color: '#5b21b6', marginBottom: 8 },
+    stepRow:    { fontSize: 12, color: '#4c1d95', lineHeight: 22 },
 
-    cardIdentifyBtn: {
-        paddingVertical: 10, borderRadius: 14,
-        flexDirection: 'row', justifyContent: 'center', alignItems: 'center'
-    },
-    cardIdentifyText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
-    trashBtn: { padding: 8, backgroundColor: '#fee2e2', borderRadius: 12 },
+    emptyCard:  { alignItems: 'center', padding: 30 },
+    emptyTitle: { fontSize: 16, fontWeight: 'bold', color: '#a78bfa', marginTop: 12 },
+    emptySub:   { fontSize: 12, color: '#6d28d9', marginTop: 6, textAlign: 'center' },
+    emptyBtn:   { backgroundColor: C.purple, paddingVertical: 12, paddingHorizontal: 24,
+                  borderRadius: 14, flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+    emptyBtnTxt:{ color: 'white', fontWeight: 'bold' },
 
-    cameraModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 18 },
-    cameraCard: { backgroundColor: '#1e1b4b', borderRadius: 22, padding: 20, alignItems: 'center' },
-    cameraModalTitle: { fontSize: 16, fontWeight: 'bold', color: 'white', textAlign: 'center' },
-    cameraModalSub: { fontSize: 12, color: '#a78bfa', marginTop: 3, marginBottom: 14 },
-    viewfinderFrame: {
-        width: 220, height: 220, borderRadius: 110, overflow: 'hidden',
-        borderWidth: 3, borderColor: '#4ade80', position: 'relative', backgroundColor: '#000'
-    },
-    reticleRing: {
-        position: 'absolute', top: 16, left: 16, right: 16, bottom: 16,
-        borderRadius: 94, borderWidth: 2, borderColor: 'rgba(74,222,128,0.5)', borderStyle: 'dashed'
-    },
-    cameraActionRow: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
-    closeCameraBtn: { flex: 1, padding: 12, borderRadius: 14, backgroundColor: '#374151', alignItems: 'center' },
-    closeCameraText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-    captureBtn: { flex: 1.5, padding: 12, borderRadius: 14, backgroundColor: '#16a34a', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
-    captureBtnText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
+    section: { color: '#a78bfa', fontWeight: 'bold', fontSize: 13, marginBottom: 12 },
 
-    scanModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 18 },
-    scanCard: { backgroundColor: 'white', borderRadius: 22, padding: 20, alignItems: 'center' },
-    scanBadge: {
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#d1fae5',
-        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, marginBottom: 14
-    },
-    scanBadgeText: { color: '#065f46', fontWeight: 'bold', fontSize: 11, marginLeft: 6 },
-    scanIconCircle: { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
-    scanPersonName: { fontSize: 18, fontWeight: 'bold', color: '#1f1545', textAlign: 'center' },
-    scanPersonRelation: { fontSize: 14, fontWeight: 'bold', color: '#7c3aed', marginTop: 3 },
-    scanPersonDesc: { fontSize: 12, color: '#4b5563', textAlign: 'center', marginTop: 8, lineHeight: 18, paddingHorizontal: 8 },
+    card:    { backgroundColor: 'white', borderRadius: 18, padding: 16, marginBottom: 14,
+               shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+    cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+    avatar:  { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+    cardName:{ fontSize: 15, fontWeight: 'bold', color: '#1f1545' },
+    cardRel: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+    faceTag: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    cardDesc:{ fontSize: 12, color: '#4b5563', lineHeight: 17, marginBottom: 10 },
+    delBtn:  { padding: 8, backgroundColor: '#fee2e2', borderRadius: 10, marginLeft: 6 },
 
-    speakBtn: {
-        backgroundColor: '#16a34a', paddingHorizontal: 20, paddingVertical: 12,
-        borderRadius: 16, flexDirection: 'row', alignItems: 'center', marginTop: 16, width: '100%', justifyContent: 'center'
-    },
-    speakBtnText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
-    closeScanBtn: { marginTop: 12, paddingVertical: 8, paddingHorizontal: 20 },
-    closeScanText: { color: '#888', fontWeight: 'bold', fontSize: 13 },
+    cardBtns:{ flexDirection: 'row', gap: 10 },
+    btn:     { flex: 1, paddingVertical: 10, borderRadius: 12,
+               flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+    btnTxt:  { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 18 },
-    modalContent: { width: '90%', backgroundColor: 'white', borderRadius: 22, padding: 20 },
-    modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center', color: '#1f1545' },
-    label: { fontSize: 12, fontWeight: 'bold', color: '#7c3aed', marginBottom: 6 },
-    input: { borderWidth: 1.5, borderColor: '#cbd5e1', borderRadius: 14, padding: 12, marginBottom: 14, fontSize: 13, backgroundColor: '#f8fafc', color: '#1f1545' },
-    modalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 10 },
-    cancelBtn: { padding: 12, flex: 1, alignItems: 'center', backgroundColor: '#e2e8f0', borderRadius: 14 },
-    cancelText: { color: '#475569', fontWeight: 'bold', fontSize: 13 },
-    saveBtn: { backgroundColor: '#7c3aed', padding: 12, borderRadius: 14, flex: 1.2, alignItems: 'center' },
-    saveText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'center', padding: 18 },
 
-    personPill: {
-        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12,
-        backgroundColor: '#374151', borderWidth: 1, borderColor: '#4b5563'
-    },
-    personPillActive: { backgroundColor: '#7c3aed', borderColor: '#a78bfa' },
-    personPillText: { color: '#9ca3af', fontSize: 11, fontWeight: 'bold' },
-    personPillTextActive: { color: 'white', fontSize: 11, fontWeight: 'bold' },
+    camBox:  { backgroundColor: '#1e1b4b', borderRadius: 24, padding: 20, alignItems: 'center' },
+    camTitle:{ color: 'white', fontWeight: 'bold', fontSize: 17, textAlign: 'center' },
+    camSub:  { color: '#a78bfa', fontSize: 11, marginTop: 4, marginBottom: 14, textAlign: 'center', lineHeight: 17 },
+
+    finder:  { width: 240, height: 240, borderRadius: 120, overflow: 'hidden',
+               borderWidth: 3, borderColor: '#4ade80', position: 'relative', backgroundColor: '#000',
+               marginBottom: 16 },
+    finderPh:{ flex: 1, justifyContent: 'center', alignItems: 'center' },
+    reticle: { position: 'absolute', inset: 16, borderRadius: 100,
+               borderWidth: 2, borderColor: 'rgba(74,222,128,0.4)', borderStyle: 'dashed' },
+    scanLayer:{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)',
+                justifyContent: 'center', alignItems: 'center', gap: 10 },
+    scanTxt:  { color: '#4ade80', fontWeight: 'bold', fontSize: 13 },
+
+    camBtns:  { flexDirection: 'row', gap: 10, width: '100%' },
+    camCancel:{ flex: 1, padding: 13, borderRadius: 14, backgroundColor: '#374151', alignItems: 'center' },
+    camAction:{ flex: 1.8, padding: 13, borderRadius: 14, backgroundColor: C.green,
+                flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+
+    resultEmoji: { fontSize: 48, textAlign: 'center', marginBottom: 8 },
+    resultBadge: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 14, marginBottom: 14 },
+    bigIcon:     { width: 86, height: 86, borderRadius: 43, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+    rName:       { fontSize: 20, fontWeight: 'bold', color: 'white', textAlign: 'center' },
+    rRel:        { fontSize: 13, fontWeight: 'bold', marginTop: 3, textAlign: 'center' },
+    rDesc:       { fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 8, lineHeight: 18, paddingHorizontal: 6 },
+    rBtn:        { paddingHorizontal: 20, paddingVertical: 13, borderRadius: 16,
+                   flexDirection: 'row', alignItems: 'center', marginTop: 14, width: '100%', justifyContent: 'center' },
+    rBtnTxt:     { color: 'white', fontWeight: 'bold', fontSize: 14 },
+
+    formBox:    { backgroundColor: 'white', borderRadius: 22, padding: 22 },
+    formTitle:  { fontSize: 17, fontWeight: 'bold', color: '#1f1545', textAlign: 'center', marginBottom: 4 },
+    formSub:    { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 14, lineHeight: 17 },
+    label:      { fontSize: 12, fontWeight: 'bold', color: C.purple, marginBottom: 5 },
+    input:      { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 12, padding: 12,
+                  marginBottom: 12, fontSize: 13, color: '#1f1545', backgroundColor: '#f8fafc' },
+    nextBtn:    { backgroundColor: C.purple, paddingVertical: 14, borderRadius: 16,
+                  flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+    nextBtnTxt: { color: 'white', fontWeight: 'bold', fontSize: 14 },
 });

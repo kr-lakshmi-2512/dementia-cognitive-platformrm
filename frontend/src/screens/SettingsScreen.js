@@ -117,14 +117,6 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.card}>
                     <Text style={styles.cardTitle}>👥 Linked Care Network</Text>
                     <View style={styles.teamItem}>
-                        <Ionicons name="heart" size={22} color="#ec4899" />
-                        <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={styles.teamName}>Spandana</Text>
-                            <Text style={styles.teamRole}>Daughter & Memory Companion</Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.teamItem}>
                         <Ionicons name="shield-checkmark" size={22} color="#10b981" />
                         <View style={{ flex: 1, marginLeft: 12 }}>
                             <Text style={styles.teamName}>Lakshmi K R</Text>

@@ -46,7 +46,6 @@ def add_reminder(
     rem_db = services.create_reminder(db, reminder=reminder_in, user_id=target_id)
     
     try:
-        from services.background_tasks import dispatch_automated_alert
         reminder_time = reminder_in.time.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
         delay_seconds = (reminder_time - now).total_seconds()

@@ -134,7 +134,7 @@ def get_memory_graph(db: Session, patient_id: int):
 
 # 2. Real-Time Cognitive Speech & Confusion Analyzer
 def analyze_cognitive_speech(speech_text: str, patient_name: str = "Rachana"):
-    text = speech_text.lower().trim() if speech_text else ""
+    text = speech_text.lower().strip() if speech_text else ""
 
     if any(q in text for q in ["where am i", "where is this", "am i lost"]):
         return {

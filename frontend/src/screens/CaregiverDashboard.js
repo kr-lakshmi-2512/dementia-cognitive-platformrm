@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Alert, FlatList, ScrollView, StyleSheet, Text, TextInput,
+    Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput,
     TouchableOpacity, View, Modal, Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -148,6 +148,7 @@ export default function CaregiverDashboard({ navigation }) {
     const [linkPatientEmail, setLinkPatientEmail]   = useState('');
     const [activeTab, setActiveTab]                 = useState('overview');
     const [selectedAnalyticsPatient, setSelectedAnalyticsPatient] = useState(null);
+    const [removedPatientIds, setRemovedPatientIds] = useState([]);
 
     // Patient AI & Modal state
     const [patientAiData, setPatientAiData]         = useState({});
@@ -159,6 +160,28 @@ export default function CaregiverDashboard({ navigation }) {
     const [newSymptom, setNewSymptom]               = useState('');
     const [newMedName, setNewMedName]               = useState('');
     const [newMedTime, setNewMedTime]               = useState('10:00 AM');
+    const [medConfirm, setMedConfirm]               = useState(null);  // { name, time } shown after scheduling
+
+    /* ── Show browser push notification for medication scheduling ── */
+    const showMedNotification = async (name, time) => {
+        if (Platform.OS !== 'web' || !('Notification' in window)) return;
+        try {
+            let permission = Notification.permission;
+            if (permission === 'default') {
+                permission = await Notification.requestPermission();
+            }
+            if (permission === 'granted') {
+                new Notification('💊 Medication Scheduled!', {
+                    body: `Medicine: ${name}\n🕐 Time: ${time}\nPatient will be notified automatically.`,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/2913/2913502.png',
+                    badge: 'https://cdn-icons-png.flaticon.com/512/2913/2913502.png',
+                    tag: 'med-reminder',
+                });
+            }
+        } catch (e) {
+            console.log('Notification error:', e);
+        }
+    };
 
     const handleScheduleMedication = async () => {
         if (!newMedName.trim()) {
@@ -179,15 +202,29 @@ export default function CaregiverDashboard({ navigation }) {
                 finalDate.setMinutes(minutes);
             }
             const titleString = `Medication - ${newMedName.trim()}`;
+            const savedName   = newMedName.trim();
+            const savedTime   = newMedTime;
             await addReminder(titleString, finalDate.toISOString());
-            setNewMedName('');
-            
-            playEmergencySirenSound(`Medication reminder for ${newMedName.trim()} scheduled! Voice assistant will announce it on patient app.`);
-            if (Platform.OS === 'web') {
-                window.alert(`✅ Scheduled & Voice Sync Active!\n\nVoice reminder scheduled for ${newMedName.trim()} at ${newMedTime}. The patient app will announce it automatically.`);
-            } else {
-                Alert.alert('✅ Scheduled & Voice Sync Active', `Voice reminder scheduled for ${newMedName.trim()} at ${newMedTime}. The patient app will announce it automatically.`);
+
+            // 🔊 Voice confirmation
+            const speakMsg = `Medication reminder scheduled for ${savedName} at ${savedTime}. The patient will be notified automatically.`;
+            if (Platform.OS === 'web' && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                const utt = new window.SpeechSynthesisUtterance(speakMsg);
+                utt.lang = 'en-IN';
+                utt.rate = 0.9;
+                window.speechSynthesis.speak(utt);
             }
+
+            // 🔔 Browser push notification (if allowed)
+            await showMedNotification(savedName, savedTime);
+
+            // 💬 Show popup modal confirmation
+            setMedConfirm({ name: savedName, time: savedTime });
+            // Auto-close after 5 seconds
+            setTimeout(() => setMedConfirm(null), 5000);
+
+            setNewMedName('');
             loadDashboardData();
         } catch (e) {
             Alert.alert('Error', e.response?.data?.detail || 'Could not schedule reminder.');
@@ -215,9 +252,10 @@ export default function CaregiverDashboard({ navigation }) {
                 fetchReminders()
             ]);
 
-            const patientIds = new Set(fetchedPatients.map((p) => p.id));
+            const activePatients = fetchedPatients.filter(p => !removedPatientIds.includes(p.id));
+            const patientIds = new Set(activePatients.map((p) => p.id));
             setCurrentUser(user);
-            setPatients(fetchedPatients);
+            setPatients(activePatients);
             setAlerts(fetchedAlerts.filter((a) => patientIds.size === 0 || patientIds.has(a.user_id)));
             setReminders(fetchedReminders.filter((r) => patientIds.size === 0 || patientIds.has(r.user_id)));
 
@@ -281,6 +319,59 @@ export default function CaregiverDashboard({ navigation }) {
         }
     };
 
+    const handleRemovePatient = (patient) => {
+        const confirmRemove = () => {
+            setRemovedPatientIds(prev => [...prev, patient.id]);
+            setPatients(prev => prev.filter(p => p.id !== patient.id));
+            if (Platform.OS === 'web') {
+                window.alert(`✅ Patient ${patient.full_name} has been removed from your list.`);
+            } else {
+                Alert.alert('✅ Patient Removed', `Patient ${patient.full_name} has been removed from your list.`);
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm(`Are you sure you want to remove ${patient.full_name} from your assigned patients list?`)) {
+                confirmRemove();
+            }
+        } else {
+            Alert.alert(
+                'Remove Patient',
+                `Are you sure you want to remove ${patient.full_name} from your assigned patients list?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Remove', style: 'destructive', onPress: confirmRemove }
+                ]
+            );
+        }
+    };
+
+    const handleOpenWhatsApp = (patient) => {
+        const msg = `Emergency check-in for patient ${patient.full_name || 'Patient'} (${patient.email || ''}). Please respond immediately.`;
+        const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+        if (Platform.OS === 'web') {
+            window.open(waUrl, '_blank');
+        } else {
+            Linking.openURL(waUrl).catch(() => {
+                Alert.alert('WhatsApp Error', 'Could not open WhatsApp.');
+            });
+        }
+    };
+
+    const handleOpenEmail = (patient) => {
+        const email = patient.email || 'patient@example.com';
+        const subject = `Emergency Check-in: ${patient.full_name || 'Patient'}`;
+        const body = `Hello,\n\nThis is an emergency check-in alert for patient ${patient.full_name || 'Patient'}.\n\nPlease reply or check the Dementia Cognitive Platform.\n\nBest regards,\nCare Team`;
+        const mailtoUrl = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        if (Platform.OS === 'web') {
+            window.location.href = mailtoUrl;
+        } else {
+            Linking.openURL(mailtoUrl).catch(() => {
+                Alert.alert('Email Error', 'Could not launch email client.');
+            });
+        }
+    };
+
     const handleSendMessage = async () => {
         if (!selectedChatUser || !draftMessage.trim()) return;
         try {
@@ -317,6 +408,7 @@ export default function CaregiverDashboard({ navigation }) {
     };
 
     return (
+        <View style={{ flex: 1 }}>
         <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
             {/* Header */}
@@ -530,6 +622,7 @@ export default function CaregiverDashboard({ navigation }) {
                                     <Text style={styles.actionBtnText}>📢 SCHEDULE VOICE REMINDER</Text>
                                 </TouchableOpacity>
                             </View>
+
                         </View>
                     </View>
                 </>
@@ -560,6 +653,17 @@ export default function CaregiverDashboard({ navigation }) {
                                             </Text>
                                         </View>
                                     )}
+                                    <TouchableOpacity
+                                        style={{
+                                            flexDirection: 'row', alignItems: 'center', gap: 4,
+                                            backgroundColor: '#fee2e2', borderRadius: 10,
+                                            paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8,
+                                        }}
+                                        onPress={() => handleRemovePatient(patient)}
+                                    >
+                                        <Ionicons name="trash-outline" size={16} color="#dc2626" />
+                                        <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 12 }}>Remove</Text>
+                                    </TouchableOpacity>
                                 </View>
 
                                 {/* AI Summary Box */}
@@ -591,11 +695,11 @@ export default function CaregiverDashboard({ navigation }) {
                                 </View>
 
                                 <View style={[styles.btnRow, { marginTop: 12 }]}>
-                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#25D366' }]} onPress={() => Linking.openURL(`whatsapp://send?text=Emergency check-in with patient ${patient.full_name}`)}>
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#25D366' }]} onPress={() => handleOpenWhatsApp(patient)}>
                                         <Ionicons name="logo-whatsapp" size={20} color="white" />
                                         <Text style={styles.actionGridText}> WhatsApp</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#dc2626' }]} onPress={() => Linking.openURL(`mailto:${patient.email}?subject=Emergency Check-in`)}>
+                                    <TouchableOpacity style={[styles.actionGridBtn, { backgroundColor: '#dc2626' }]} onPress={() => handleOpenEmail(patient)}>
                                         <Ionicons name="mail" size={20} color="white" />
                                         <Text style={styles.actionGridText}> Email Alert</Text>
                                     </TouchableOpacity>
@@ -746,6 +850,94 @@ export default function CaregiverDashboard({ navigation }) {
 
             <View style={{ height: 80 }} />
         </ScrollView>
+
+        {/* ══════ MEDICATION SCHEDULED POPUP MODAL ══════ */}
+        <Modal visible={!!medConfirm} transparent animationType="fade">
+            <View style={{
+                flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+                justifyContent: 'center', alignItems: 'center', padding: 30,
+            }}>
+                <View style={{
+                    backgroundColor: 'white', borderRadius: 24, padding: 28,
+                    alignItems: 'center', width: '100%', maxWidth: 380,
+                    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
+                }}>
+                    {/* Big animated checkmark */}
+                    <View style={{
+                        width: 90, height: 90, borderRadius: 45,
+                        backgroundColor: '#16a34a', justifyContent: 'center',
+                        alignItems: 'center', marginBottom: 18,
+                    }}>
+                        <Text style={{ fontSize: 48 }}>✅</Text>
+                    </View>
+
+                    <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#065f46', textAlign: 'center' }}>
+                        Medication Scheduled!
+                    </Text>
+
+                    <View style={{
+                        backgroundColor: '#f0fdf4', borderRadius: 14, padding: 16,
+                        marginTop: 16, width: '100%', gap: 8,
+                    }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <Text style={{ fontSize: 22 }}>💊</Text>
+                            <View>
+                                <Text style={{ fontSize: 11, color: '#6b7280' }}>MEDICINE</Text>
+                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#15803d' }}>
+                                    {medConfirm?.name}
+                                </Text>
+                            </View>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                            <Text style={{ fontSize: 22 }}>🕐</Text>
+                            <View>
+                                <Text style={{ fontSize: 11, color: '#6b7280' }}>SCHEDULED TIME</Text>
+                                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#15803d' }}>
+                                    {medConfirm?.time}
+                                </Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 12, textAlign: 'center' }}>
+                        🔔 The patient will be notified automatically.
+                    </Text>
+
+                    {/* Read Aloud button */}
+                    <TouchableOpacity
+                        style={{
+                            backgroundColor: '#7c3aed', paddingVertical: 12, paddingHorizontal: 28,
+                            borderRadius: 14, flexDirection: 'row', alignItems: 'center',
+                            gap: 8, marginTop: 16, width: '100%', justifyContent: 'center',
+                        }}
+                        onPress={() => {
+                            if (window.speechSynthesis) {
+                                window.speechSynthesis.cancel();
+                                const utt = new window.SpeechSynthesisUtterance(
+                                    `Medication reminder scheduled for ${medConfirm?.name} at ${medConfirm?.time}. The patient will be notified automatically.`
+                                );
+                                utt.lang = 'en-IN'; utt.rate = 0.9;
+                                window.speechSynthesis.speak(utt);
+                            }
+                        }}
+                    >
+                        <Text style={{ fontSize: 20 }}>🔊</Text>
+                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 15 }}>READ ALOUD</Text>
+                    </TouchableOpacity>
+
+                    {/* Close button */}
+                    <TouchableOpacity
+                        style={{ marginTop: 12, padding: 10 }}
+                        onPress={() => setMedConfirm(null)}
+                    >
+                        <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: 'bold' }}>
+                            CLOSE  (auto-closes in 5 sec)
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        </Modal>
+        </View>
     );
 }
 

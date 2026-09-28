@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
+// expo-location replaced with web Geolocation API
 import {
     fetchReminders,
     triggerPanicAlert,
@@ -92,83 +92,203 @@ export default function PatientDashboard({ navigation }) {
     // Object Memory Finder Modal ("Where did I put it?")
     const [objectModal, setObjectModal]         = useState(false);
 
-    // Mini Memory Training Game Modal
-    const [gameModal, setGameModal]             = useState(false);
-    const [gameIndex, setGameIndex]             = useState(0);
-    const [gameScore, setGameScore]             = useState(0);
-    const [gameFinished, setGameFinished]       = useState(false);
-    const [selectedOption, setSelectedOption]   = useState(null);
+    // ─── Level-Wise Cognitive Quiz Game ───
+    const [gameModal,      setGameModal]      = useState(false);
+    const [quizLevel,      setQuizLevel]      = useState(null);   // null | 'easy' | 'medium' | 'hard'
+    const [gameIndex,      setGameIndex]      = useState(0);
+    const [gameScore,      setGameScore]      = useState(0);
+    const [gameFinished,   setGameFinished]   = useState(false);
+    const [selectedOption, setSelectedOption] = useState(null);
+    const [levelResults,   setLevelResults]   = useState({});     // { easy: score, medium: score, hard: score }
 
-    const DAILY_MEMORY_QUESTIONS = [
-        {
-            id: 1,
-            category: '👨‍👩‍👧 Family Anchor',
-            question: 'Who is your daughter who checks on your health daily?',
-            options: [
-                { text: 'A. Spandana (Daughter)', isCorrect: true, feedback: 'Correct! Spandana is your loving daughter.' },
-                { text: 'B. Lakshmi K R (Caregiver)', isCorrect: false, feedback: 'Lakshmi K R is your primary caregiver. Spandana is your daughter.' }
+    // ── 3-Level Question Bank (generic, no hardcoded names) ──
+    const QUIZ_LEVELS = {
+        easy: {
+            label: '🟢 Easy',
+            color: '#16a34a',
+            bg: '#f0fdf4',
+            desc: 'Basic orientation & daily routine',
+            questions: [
+                {
+                    category: '📅 Time & Date',
+                    question: 'Which of these is a part of the day when the sun is shining?',
+                    options: [
+                        { text: 'A. Daytime (Morning / Afternoon)', isCorrect: true,  feedback: 'Correct! The sun shines during the daytime.' },
+                        { text: 'B. Midnight (12 AM)',               isCorrect: false, feedback: 'Midnight is at night when there is no sunlight.' },
+                    ]
+                },
+                {
+                    category: '🏠 Basic Safety',
+                    question: 'What should you do if you feel unwell or need help at home?',
+                    options: [
+                        { text: 'A. Call your caregiver or family member', isCorrect: true,  feedback: 'Excellent! Always call a trusted person when you need help.' },
+                        { text: 'B. Go outside alone without telling anyone', isCorrect: false, feedback: 'Always inform your caregiver before going out.' },
+                    ]
+                },
+                {
+                    category: '💊 Daily Routine',
+                    question: 'When is the best time to take your morning medicines?',
+                    options: [
+                        { text: 'A. After waking up in the morning', isCorrect: true,  feedback: 'Well done! Taking medicines after waking up keeps you healthy.' },
+                        { text: 'B. Late at night before sleeping',   isCorrect: false, feedback: 'Morning medicines should be taken after you wake up.' },
+                    ]
+                },
+                {
+                    category: '🌦️ Seasons & Nature',
+                    question: 'Which season has the longest and hottest days?',
+                    options: [
+                        { text: 'A. Summer',   isCorrect: true,  feedback: 'Correct! Summer has the hottest and longest days.' },
+                        { text: 'B. Winter',   isCorrect: false, feedback: 'Winter is cold. Summer is the hottest season.' },
+                    ]
+                },
+                {
+                    category: '🍎 Food & Health',
+                    question: 'Which food is the healthiest choice for breakfast?',
+                    options: [
+                        { text: 'A. Fruits, oats or idli / dosa',       isCorrect: true,  feedback: 'Great choice! Healthy food gives you energy for the day.' },
+                        { text: 'B. Cold soft drinks and fried snacks', isCorrect: false, feedback: 'Healthy foods like fruits and idli are the best breakfast.' },
+                    ]
+                },
             ]
         },
-        {
-            id: 2,
-            category: '💊 Daily Routine',
-            question: 'What should you do after waking up in the morning?',
-            options: [
-                { text: 'A. Take morning medicine & eat breakfast', isCorrect: true, feedback: 'Wonderful! Taking morning pills keeps you healthy and safe.' },
-                { text: 'B. Leave the house alone late at night', isCorrect: false, feedback: 'Remember, it is best to stay inside your safe home and take morning medicine.' }
+        medium: {
+            label: '🟡 Medium',
+            color: '#d97706',
+            bg: '#fffbeb',
+            desc: 'Memory recall & problem solving',
+            questions: [
+                {
+                    category: '🔢 Numbers & Counting',
+                    question: 'If you take 3 tablets in the morning and 2 at night, how many tablets do you take in a day?',
+                    options: [
+                        { text: 'A. 5 tablets',  isCorrect: true,  feedback: 'Correct! 3 + 2 = 5 tablets per day.' },
+                        { text: 'B. 6 tablets',  isCorrect: false, feedback: '3 morning + 2 night = 5 tablets total.' },
+                    ]
+                },
+                {
+                    category: '📍 Orientation',
+                    question: 'If someone asks where you live, what is the most important information to share?',
+                    options: [
+                        { text: 'A. Your home address and area name',       isCorrect: true,  feedback: 'Well done! Knowing your address helps others assist you.' },
+                        { text: 'B. The last place you visited on holiday', isCorrect: false, feedback: 'Your home address is the most important to remember.' },
+                    ]
+                },
+                {
+                    category: '🧩 Word Recall',
+                    question: 'Remember these 3 words: APPLE, TABLE, RIVER. Which word was in the middle?',
+                    options: [
+                        { text: 'A. TABLE',  isCorrect: true,  feedback: 'Correct! TABLE was in the middle of the three words.' },
+                        { text: 'B. RIVER',  isCorrect: false, feedback: 'The middle word was TABLE. RIVER was the last.' },
+                    ]
+                },
+                {
+                    category: '🕐 Time Reading',
+                    question: 'If it is 3:00 PM now, what time will it be in 2 hours?',
+                    options: [
+                        { text: 'A. 5:00 PM', isCorrect: true,  feedback: 'Excellent! 3 PM + 2 hours = 5 PM.' },
+                        { text: 'B. 1:00 PM', isCorrect: false, feedback: '3 PM + 2 hours = 5 PM, not 1 PM.' },
+                    ]
+                },
+                {
+                    category: '📆 Days of Week',
+                    question: 'Which day comes right AFTER Wednesday?',
+                    options: [
+                        { text: 'A. Thursday', isCorrect: true,  feedback: 'Correct! The order is Mon, Tue, Wed, Thu, Fri.' },
+                        { text: 'B. Tuesday',  isCorrect: false, feedback: 'Thursday comes after Wednesday, not Tuesday.' },
+                    ]
+                },
             ]
         },
-        {
-            id: 3,
-            category: '🛡️ Primary Caregiver',
-            question: 'Who manages your daily meals and medication schedules?',
-            options: [
-                { text: 'A. Lakshmi K R (Primary Caregiver)', isCorrect: true, feedback: 'Correct! Caregiver Lakshmi prepares meals and medicine daily.' },
-                { text: 'B. A random stranger', isCorrect: false, feedback: 'Caregiver Lakshmi K R manages your meals and medicine daily.' }
-            ]
-        },
-        {
-            id: 4,
-            category: '📍 Location Orientation',
-            question: 'Where are you right now when your Safe Zone is active?',
-            options: [
-                { text: 'A. Safe at home in your residence', isCorrect: true, feedback: 'Yes! You are completely safe in your home.' },
-                { text: 'B. Lost at an airport', isCorrect: false, feedback: 'You are safe at home in your residence.' }
-            ]
-        },
-        {
-            id: 5,
-            category: '🩺 Doctor & Care',
-            question: 'Who is your specialist doctor overseeing your care plan?',
-            options: [
-                { text: 'A. Dr. Pushpa H C', isCorrect: true, feedback: 'Correct! Dr. Pushpa H C oversees your medical care.' },
-                { text: 'B. Spandana', isCorrect: false, feedback: 'Dr. Pushpa H C is your doctor. Spandana is your daughter.' }
+        hard: {
+            label: '🔴 Hard',
+            color: '#dc2626',
+            bg: '#fef2f2',
+            desc: 'Advanced reasoning & concentration',
+            questions: [
+                {
+                    category: '🔢 Reverse Counting',
+                    question: 'Count backward by 3 starting from 20. What is the THIRD number you say?',
+                    options: [
+                        { text: 'A. 14  (20 → 17 → 14)', isCorrect: true,  feedback: 'Excellent! 20 → 17 → 14. Correct third number.' },
+                        { text: 'B. 15  (wrong step)',     isCorrect: false, feedback: '20 – 3 = 17, 17 – 3 = 14. The answer is 14.' },
+                    ]
+                },
+                {
+                    category: '🧩 Pattern Recognition',
+                    question: 'What comes next in this pattern: 2, 4, 8, 16, ___?',
+                    options: [
+                        { text: 'A. 32  (each number doubles)', isCorrect: true,  feedback: 'Correct! Each number is multiplied by 2: 16 × 2 = 32.' },
+                        { text: 'B. 18  (adding 2)',             isCorrect: false, feedback: 'The pattern is doubling: 2 → 4 → 8 → 16 → 32.' },
+                    ]
+                },
+                {
+                    category: '📖 Reading Comprehension',
+                    question: 'Read this: "Ravi went to the market, bought vegetables, and came home." What did Ravi buy?',
+                    options: [
+                        { text: 'A. Vegetables',  isCorrect: true,  feedback: 'Correct! The sentence says Ravi bought vegetables.' },
+                        { text: 'B. Medicine',     isCorrect: false, feedback: 'The sentence clearly says Ravi bought vegetables at the market.' },
+                    ]
+                },
+                {
+                    category: '🔤 Spelling & Language',
+                    question: 'Which spelling is correct?',
+                    options: [
+                        { text: 'A. HOSPITAL',  isCorrect: true,  feedback: 'Correct! HOSPITAL is spelled correctly.' },
+                        { text: 'B. HOSPITEL',  isCorrect: false, feedback: 'The correct spelling is HOSPITAL, not HOSPITEL.' },
+                    ]
+                },
+                {
+                    category: '⚖️ Logical Reasoning',
+                    question: 'If all roses are flowers and some flowers fade quickly, can we say all roses fade quickly?',
+                    options: [
+                        { text: 'A. No — only SOME flowers fade, not necessarily all roses', isCorrect: true,  feedback: 'Excellent reasoning! Just because some flowers fade does not mean all roses do.' },
+                        { text: 'B. Yes — because roses are flowers',                          isCorrect: false, feedback: '"Some flowers" does not mean all. So we cannot say all roses fade quickly.' },
+                    ]
+                },
             ]
         }
-    ];
+    };
+
+    const currentLevelData  = quizLevel ? QUIZ_LEVELS[quizLevel] : null;
+    const currentQuestions  = currentLevelData?.questions || [];
+    const totalQ            = currentQuestions.length;
 
     const handleAnswerOption = (opt) => {
         setSelectedOption(opt);
         speak(opt.feedback);
-        if (opt.isCorrect) {
-            setGameScore(prev => prev + 1);
-        }
+        if (opt.isCorrect) setGameScore(prev => prev + 1);
         setTimeout(() => {
-            if (gameIndex + 1 < DAILY_MEMORY_QUESTIONS.length) {
+            if (gameIndex + 1 < totalQ) {
                 setGameIndex(prev => prev + 1);
                 setSelectedOption(null);
             } else {
+                const finalScore = opt.isCorrect ? gameScore + 1 : gameScore;
+                setLevelResults(prev => ({ ...prev, [quizLevel]: finalScore }));
                 setGameFinished(true);
             }
         }, 2200);
     };
 
-    const resetGame = () => {
-        setGameIndex(0);
-        setGameScore(0);
-        setGameFinished(false);
-        setSelectedOption(null);
+    const getAnalysis = (score, total) => {
+        const pct = (score / total) * 100;
+        if (pct === 100) return { label: 'Perfect! 🏆',     color: '#16a34a', msg: 'Outstanding performance! Your cognitive skills are excellent.' };
+        if (pct >= 80)  return { label: 'Excellent! 🌟',    color: '#16a34a', msg: 'Very good recall and reasoning. Keep it up!' };
+        if (pct >= 60)  return { label: 'Good 👍',           color: '#d97706', msg: 'Good effort. A little more practice will make it perfect.' };
+        if (pct >= 40)  return { label: 'Needs Practice 📝', color: '#f59e0b', msg: 'Keep practicing. Daily brain exercises really help.' };
+        return          { label: 'Let\'s Try Again 💪',      color: '#dc2626', msg: 'Do not worry. Practicing every day makes a big difference.' };
     };
+
+    const resetGame = () => {
+        setGameIndex(0); setGameScore(0);
+        setGameFinished(false); setSelectedOption(null);
+        setQuizLevel(null);
+    };
+
+    const startLevel = (lvl) => {
+        setQuizLevel(lvl); setGameIndex(0);
+        setGameScore(0); setGameFinished(false); setSelectedOption(null);
+    };
+
 
     const pulseAnim  = useRef(new Animated.Value(1)).current;
     const checkedIds = useRef(new Set());
@@ -209,13 +329,16 @@ export default function PatientDashboard({ navigation }) {
         return () => clearInterval(interval);
     }, [reminders]);
 
-    const autoTrackLocation = async () => {
+    const autoTrackLocation = () => {
         try {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === 'granted') {
-                const { coords } = await Location.getCurrentPositionAsync({});
-                await checkInLocation(coords.latitude, coords.longitude);
-                setLocationShared(true);
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        await checkInLocation(pos.coords.latitude, pos.coords.longitude);
+                        setLocationShared(true);
+                    },
+                    (e) => console.log('Location fallback', e)
+                );
             }
         } catch (e) {
             console.log('Auto location tracking fallback', e);
@@ -301,7 +424,7 @@ export default function PatientDashboard({ navigation }) {
     // 1-Tap "I NEED HELP REMEMBERING" Action
     const handleNeedHelpRemembering = async () => {
         stopRepeatingSpeech();
-        const greeting = `Hello ${currentUser?.full_name || 'Rachana'}! I am your Memory Companion. You are completely safe in your home. Your daughter Spandana and caregiver Lakshmi K R set me up to help you remember everything.`;
+        const greeting = `Hello ${currentUser?.full_name || 'Patient'}! I am your Memory Companion. You are completely safe in your home. Your caregiver Lakshmi K R and Dr. Pushpa set me up to help you remember everything.`;
         setVoiceTitle("🧠 Memory Companion Active");
         setCompanionText(greeting);
         setVoiceModal(true);
@@ -315,7 +438,7 @@ export default function PatientDashboard({ navigation }) {
     // 3 DISTINCT COGNITIVE QUESTIONS & REASSURANCES
     const handleWhereAmI = () => {
         stopRepeatingSpeech();
-        const text = `You are safe at home in your residence, ${currentUser?.full_name || 'Rachana'}. Your home safe zone is active, and your primary caregiver Lakshmi K R is nearby to assist you. Your daughter Spandana is also monitoring you.`;
+        const text = `You are safe at home in your residence, ${currentUser?.full_name || 'Patient'}. Your home safe zone is active, and your primary caregiver Lakshmi K R and Dr. Pushpa are assisting you.`;
         setVoiceTitle("📍 Location Guidance: Home Safe Zone");
         setCompanionText(text);
         setVoiceModal(true);
@@ -325,7 +448,7 @@ export default function PatientDashboard({ navigation }) {
 
     const handleWhatShouldIDo = () => {
         stopRepeatingSpeech();
-        const text = `Right now, you should take your scheduled morning medication. After taking your pills, your daughter Spandana will call you to check in. Caregiver Lakshmi is also available to help.`;
+        const text = `Right now, you should take your scheduled morning medication. Caregiver Lakshmi K R and Dr. Pushpa are available to help you.`;
         setVoiceTitle("⏰ Next Action: Take Morning Medicine");
         setCompanionText(text);
         setVoiceModal(true);
@@ -335,8 +458,8 @@ export default function PatientDashboard({ navigation }) {
 
     const handleWhoIsHelpingMe = () => {
         stopRepeatingSpeech();
-        const text = `Your loving daughter Spandana set up this Memory Companion for you. Your caregiver Lakshmi K R manages your meals and medicine daily, and Dr. Pushpa H C oversees your medical and neurological health.`;
-        setVoiceTitle("👥 Your Care Team: Rachana, Lakshmi & Dr. Pushpa");
+        const text = `Your caregiver Lakshmi K R manages your meals and medicine daily, and Dr. Pushpa H C oversees your medical and neurological health.`;
+        setVoiceTitle("👥 Your Care Team: Lakshmi & Dr. Pushpa");
         setCompanionText(text);
         setVoiceModal(true);
         setVoiceState('speaking');
@@ -398,7 +521,7 @@ export default function PatientDashboard({ navigation }) {
 
     const handlePlayBrainGame = () => {
         setGameModal(true);
-        speak("Welcome to Memory Training. Who is your daughter?");
+        speak("Welcome to the memory game, hope you are doing well.");
     };
 
     const nextPending = reminders.find(r => !r.is_completed);
@@ -543,29 +666,101 @@ export default function PatientDashboard({ navigation }) {
                 </View>
             </Modal>
 
-            {/* Mini Memory Training Game Modal */}
+            {/* ═══ LEVEL-WISE COGNITIVE QUIZ MODAL ═══ */}
             <Modal visible={gameModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
-                    <View style={styles.gameModalCard}>
-                        {!gameFinished ? (
+                    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                    <View style={[styles.gameModalCard, { maxHeight: '95%' }]}>
+
+                        {/* ── LEVEL SELECTOR (no level chosen yet) ── */}
+                        {!quizLevel && !gameFinished && (
                             <>
+                                <Text style={styles.quizMainTitle}>🧠 Cognitive Quiz</Text>
+                                <Text style={styles.quizMainSub}>Choose a difficulty level to begin your brain exercise session</Text>
+
+                                {/* Level Cards */}
+                                {Object.entries(QUIZ_LEVELS).map(([key, lvl]) => (
+                                    <TouchableOpacity
+                                        key={key}
+                                        style={[styles.levelCard, { borderColor: lvl.color, backgroundColor: lvl.bg }]}
+                                        onPress={() => startLevel(key)}
+                                    >
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={[styles.levelLabel, { color: lvl.color }]}>{lvl.label}</Text>
+                                            <Text style={styles.levelDesc}>{lvl.desc}</Text>
+                                            <Text style={styles.levelQCount}>{lvl.questions.length} questions</Text>
+                                        </View>
+                                        <View style={{ alignItems: 'flex-end' }}>
+                                            {levelResults[key] !== undefined ? (
+                                                <View style={[styles.levelScoreBadge, { backgroundColor: lvl.color }]}>
+                                                    <Text style={styles.levelScoreTxt}>{levelResults[key]}/{lvl.questions.length}</Text>
+                                                </View>
+                                            ) : (
+                                                <Ionicons name="chevron-forward-circle" size={30} color={lvl.color} />
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+
+                                {/* Overall analysis if any level done */}
+                                {Object.keys(levelResults).length > 0 && (
+                                    <View style={styles.overallBox}>
+                                        <Text style={styles.overallTitle}>📊 Your Progress</Text>
+                                        {Object.entries(levelResults).map(([key, score]) => {
+                                            const lvl = QUIZ_LEVELS[key];
+                                            const an  = getAnalysis(score, lvl.questions.length);
+                                            return (
+                                                <View key={key} style={styles.overallRow}>
+                                                    <Text style={styles.overallLvl}>{lvl.label}</Text>
+                                                    <Text style={[styles.overallScore, { color: an.color }]}>
+                                                        {score}/{lvl.questions.length} — {an.label}
+                                                    </Text>
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                                <TouchableOpacity style={styles.closeModalBtn} onPress={() => { setGameModal(false); resetGame(); }}>
+                                    <Text style={styles.closeModalText}>CLOSE</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+
+                        {/* ── ACTIVE QUIZ (level chosen, not finished) ── */}
+                        {quizLevel && !gameFinished && currentQuestions[gameIndex] && (
+                            <>
+                                {/* Level badge + progress */}
                                 <View style={styles.gameHeaderRow}>
-                                    <View style={styles.categoryTag}>
-                                        <Text style={styles.categoryTagText}>
-                                            {DAILY_MEMORY_QUESTIONS[gameIndex].category}
+                                    <View style={[styles.categoryTag, { backgroundColor: currentLevelData.color }]}>
+                                        <Text style={[styles.categoryTagText, { color: 'white' }]}>
+                                            {currentLevelData.label}
                                         </Text>
                                     </View>
                                     <Text style={styles.gameProgressStep}>
-                                        Question {gameIndex + 1} of {DAILY_MEMORY_QUESTIONS.length}
+                                        Q {gameIndex + 1} / {totalQ}
                                     </Text>
                                 </View>
 
+                                {/* Progress bar */}
+                                <View style={styles.progressBarBg}>
+                                    <View style={[styles.progressBarFill, {
+                                        width: `${((gameIndex) / totalQ) * 100}%`,
+                                        backgroundColor: currentLevelData.color
+                                    }]} />
+                                </View>
+
+                                {/* Category */}
+                                <Text style={styles.qCategory}>{currentQuestions[gameIndex].category}</Text>
+
+                                {/* Question */}
                                 <Text style={styles.gameQuestionText}>
-                                    {DAILY_MEMORY_QUESTIONS[gameIndex].question}
+                                    {currentQuestions[gameIndex].question}
                                 </Text>
 
+                                {/* Options */}
                                 <View style={styles.optionsContainer}>
-                                    {DAILY_MEMORY_QUESTIONS[gameIndex].options.map((opt, idx) => {
+                                    {currentQuestions[gameIndex].options.map((opt, idx) => {
                                         const isSelected = selectedOption === opt;
                                         return (
                                             <TouchableOpacity
@@ -577,17 +772,13 @@ export default function PatientDashboard({ navigation }) {
                                                 onPress={() => handleAnswerOption(opt)}
                                                 disabled={selectedOption !== null}
                                             >
-                                                <Text style={[
-                                                    styles.gameOptionText,
-                                                    isSelected && { color: 'white' }
-                                                ]}>
+                                                <Text style={[styles.gameOptionText, isSelected && { color: 'white' }]}>
                                                     {opt.text}
                                                 </Text>
                                                 {isSelected && (
-                                                    <Ionicons 
-                                                        name={opt.isCorrect ? "checkmark-circle" : "close-circle"} 
-                                                        size={22} 
-                                                        color="white" 
+                                                    <Ionicons
+                                                        name={opt.isCorrect ? 'checkmark-circle' : 'close-circle'}
+                                                        size={22} color="white"
                                                     />
                                                 )}
                                             </TouchableOpacity>
@@ -595,62 +786,87 @@ export default function PatientDashboard({ navigation }) {
                                     })}
                                 </View>
 
+                                {/* Feedback */}
                                 {selectedOption && (
                                     <View style={styles.feedbackBox}>
-                                        <Ionicons 
-                                            name={selectedOption.isCorrect ? "sparkles" : "information-circle"} 
-                                            size={20} 
-                                            color={selectedOption.isCorrect ? "#10b981" : "#f59e0b"} 
+                                        <Ionicons
+                                            name={selectedOption.isCorrect ? 'sparkles' : 'information-circle'}
+                                            size={20}
+                                            color={selectedOption.isCorrect ? '#10b981' : '#f59e0b'}
                                         />
                                         <Text style={styles.feedbackText}>{selectedOption.feedback}</Text>
                                     </View>
                                 )}
 
-                                <TouchableOpacity 
-                                    style={styles.closeModalBtn} 
-                                    onPress={() => { setGameModal(false); resetGame(); }}
-                                >
-                                    <Text style={styles.closeModalText}>EXIT GAME</Text>
+                                <TouchableOpacity style={styles.closeModalBtn} onPress={() => { setGameModal(false); resetGame(); }}>
+                                    <Text style={styles.closeModalText}>EXIT QUIZ</Text>
                                 </TouchableOpacity>
                             </>
-                        ) : (
-                            /* Celebration End Screen */
-                            <View style={styles.celebrationCard}>
-                                <Text style={styles.celebrationTrophy}>🏆</Text>
-                                <Text style={styles.celebrationTitle}>Memory Training Completed!</Text>
-                                <Text style={styles.celebrationSub}>
-                                    Great job exercising your brain today! You scored {gameScore} out of {DAILY_MEMORY_QUESTIONS.length}.
-                                </Text>
-
-                                <View style={styles.starsRow}>
-                                    {Array.from({ length: 5 }).map((_, i) => (
-                                        <Ionicons 
-                                            key={i} 
-                                            name={i < gameScore ? "star" : "star-outline"} 
-                                            size={36} 
-                                            color="#f59e0b" 
-                                        />
-                                    ))}
-                                </View>
-
-                                <TouchableOpacity style={styles.replayBtn} onPress={resetGame}>
-                                    <LinearGradient colors={['#10b981', '#059669']} style={styles.replayGradient}>
-                                        <Ionicons name="refresh" size={20} color="white" />
-                                        <Text style={styles.replayText}>PLAY AGAIN</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity 
-                                    style={styles.closeModalBtn} 
-                                    onPress={() => { setGameModal(false); resetGame(); }}
-                                >
-                                    <Text style={styles.closeModalText}>FINISH & CLOSE</Text>
-                                </TouchableOpacity>
-                            </View>
                         )}
+
+                        {/* ── RESULTS SCREEN ── */}
+                        {gameFinished && quizLevel && (() => {
+                            const an = getAnalysis(gameScore, totalQ);
+                            return (
+                                <View style={styles.celebrationCard}>
+                                    <Text style={styles.celebrationTrophy}>🏆</Text>
+                                    <Text style={styles.celebrationTitle}>Level Complete!</Text>
+                                    <Text style={[styles.levelBadgeFinal, { color: currentLevelData?.color }]}>
+                                        {currentLevelData?.label}
+                                    </Text>
+
+                                    {/* Score */}
+                                    <View style={[styles.scoreBigBox, { borderColor: an.color }]}>
+                                        <Text style={[styles.scoreBigNum, { color: an.color }]}>{gameScore}/{totalQ}</Text>
+                                        <Text style={[styles.scoreBigLabel, { color: an.color }]}>{an.label}</Text>
+                                    </View>
+
+                                    {/* Stars */}
+                                    <View style={styles.starsRow}>
+                                        {Array.from({ length: totalQ }).map((_, i) => (
+                                            <Ionicons key={i} name={i < gameScore ? 'star' : 'star-outline'} size={28} color="#f59e0b" />
+                                        ))}
+                                    </View>
+
+                                    {/* Analysis message */}
+                                    <View style={[styles.analysisBox, { backgroundColor: an.color + '18', borderColor: an.color }]}>
+                                        <Ionicons name="analytics" size={18} color={an.color} />
+                                        <Text style={[styles.analysisText, { color: an.color }]}>{an.msg}</Text>
+                                    </View>
+
+                                    {/* Per-question breakdown */}
+                                    <Text style={styles.breakdownTitle}>📋 Cognitive Areas Tested</Text>
+                                    {currentQuestions.map((q, i) => (
+                                        <Text key={i} style={styles.breakdownRow}>• {q.category}</Text>
+                                    ))}
+
+                                    {/* Action buttons */}
+                                    <TouchableOpacity style={styles.replayBtn} onPress={() => startLevel(quizLevel)}>
+                                        <LinearGradient colors={['#10b981', '#059669']} style={styles.replayGradient}>
+                                            <Ionicons name="refresh" size={18} color="white" />
+                                            <Text style={styles.replayText}> RETRY THIS LEVEL</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={[styles.replayBtn, { marginTop: 8 }]} onPress={resetGame}>
+                                        <LinearGradient colors={['#7c3aed', '#6d28d9']} style={styles.replayGradient}>
+                                            <Ionicons name="layers" size={18} color="white" />
+                                            <Text style={styles.replayText}> CHOOSE ANOTHER LEVEL</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity style={styles.closeModalBtn} onPress={() => { setGameModal(false); resetGame(); }}>
+                                        <Text style={styles.closeModalText}>FINISH & CLOSE</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            );
+                        })()}
+
                     </View>
+                    </ScrollView>
                 </View>
             </Modal>
+
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
@@ -672,7 +888,7 @@ export default function PatientDashboard({ navigation }) {
                     <View style={styles.trustAnchorBox}>
                         <Ionicons name="heart-circle" size={32} color="#ec4899" />
                         <Text style={styles.trustAnchorText}>
-                            Your daughter <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>Spandana</Text> set up this Memory Helper so you always feel safe and supported.
+                            Your caregiver <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>Lakshmi K R</Text> and <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>Dr. Pushpa H C</Text> set up this Memory Helper so you always feel safe and supported.
                         </Text>
                     </View>
 
@@ -985,11 +1201,12 @@ const styles = StyleSheet.create({
     objectLoc: { fontSize: 12, color: '#4b5563', marginTop: 2 },
     objectTime: { fontSize: 11, color: '#7c3aed', marginTop: 2 },
     gameModalCard: { backgroundColor: 'white', borderRadius: 22, padding: 20, width: '92%', maxWidth: 440, alignSelf: 'center' },
-    gameHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    gameHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     categoryTag: { backgroundColor: '#f3e8ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     categoryTagText: { color: '#6d28d9', fontWeight: 'bold', fontSize: 11 },
     gameProgressStep: { fontSize: 11, color: '#64748b', fontWeight: 'bold' },
-    gameQuestionText: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 16, lineHeight: 22 },
+    gameQuestionText: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 14, lineHeight: 23 },
+    qCategory: { fontSize: 12, color: '#7c3aed', fontWeight: 'bold', marginBottom: 8 },
     optionsContainer: { gap: 10, marginBottom: 14 },
     gameOptionCard: { backgroundColor: '#f8fafc', padding: 14, borderRadius: 16, borderWidth: 1.5, borderColor: '#e2e8f0', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     gameOptCorrect: { backgroundColor: '#10b981', borderColor: '#059669' },
@@ -997,14 +1214,44 @@ const styles = StyleSheet.create({
     gameOptionText: { fontSize: 14, fontWeight: 'bold', color: '#0f172a', flex: 1 },
     feedbackBox: { backgroundColor: '#fffbeb', padding: 12, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14, borderWidth: 1, borderColor: '#fde68a' },
     feedbackText: { color: '#b45309', fontWeight: '600', fontSize: 12, flex: 1, lineHeight: 17 },
-    celebrationCard: { alignItems: 'center', paddingVertical: 8 },
-    celebrationTrophy: { fontSize: 48, marginBottom: 8 },
+    progressBarBg: { height: 6, backgroundColor: '#e2e8f0', borderRadius: 3, marginBottom: 12, overflow: 'hidden' },
+    progressBarFill: { height: 6, borderRadius: 3 },
+
+    /* Level Selector */
+    quizMainTitle: { fontSize: 20, fontWeight: '900', color: '#0f172a', textAlign: 'center', marginBottom: 4 },
+    quizMainSub:   { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 16, lineHeight: 17 },
+    levelCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderRadius: 16, padding: 14, marginBottom: 12 },
+    levelLabel: { fontSize: 15, fontWeight: '900' },
+    levelDesc:  { fontSize: 12, color: '#64748b', marginTop: 2 },
+    levelQCount:{ fontSize: 11, color: '#94a3b8', marginTop: 4 },
+    levelScoreBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+    levelScoreTxt: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+
+    /* Overall progress panel */
+    overallBox:   { backgroundColor: '#f8fafc', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#e2e8f0' },
+    overallTitle: { fontSize: 13, fontWeight: 'bold', color: '#1f1545', marginBottom: 8 },
+    overallRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    overallLvl:   { fontSize: 12, fontWeight: '700', color: '#334155' },
+    overallScore: { fontSize: 12, fontWeight: 'bold' },
+
+    /* Results screen */
+    celebrationCard: { alignItems: 'center', paddingVertical: 4 },
+    celebrationTrophy: { fontSize: 44, marginBottom: 6 },
     celebrationTitle: { fontSize: 18, fontWeight: '900', color: '#0f172a', textAlign: 'center' },
+    levelBadgeFinal: { fontSize: 15, fontWeight: 'bold', marginTop: 4, marginBottom: 10 },
+    scoreBigBox: { borderWidth: 2, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 30, alignItems: 'center', marginBottom: 14 },
+    scoreBigNum: { fontSize: 34, fontWeight: '900' },
+    scoreBigLabel: { fontSize: 14, fontWeight: 'bold', marginTop: 2 },
+    starsRow: { flexDirection: 'row', gap: 4, marginBottom: 14 },
+    analysisBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14, width: '100%' },
+    analysisText: { fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 17 },
+    breakdownTitle: { fontSize: 12, fontWeight: 'bold', color: '#334155', alignSelf: 'flex-start', marginBottom: 6 },
+    breakdownRow: { fontSize: 11, color: '#475569', alignSelf: 'flex-start', marginBottom: 3 },
     celebrationSub: { fontSize: 12, color: '#64748b', textAlign: 'center', marginTop: 6, marginBottom: 14, lineHeight: 18 },
-    starsRow: { flexDirection: 'row', gap: 6, marginBottom: 18 },
-    replayBtn: { borderRadius: 14, overflow: 'hidden', width: '100%', marginBottom: 10 },
+    replayBtn: { borderRadius: 14, overflow: 'hidden', width: '100%', marginBottom: 6 },
     replayGradient: { paddingVertical: 12, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
     replayText: { color: 'white', fontWeight: 'bold', fontSize: 13 },
+
 
     /* High Visibility Scheduled Voice Alert Modal Styles */
     modalOverlay: {
