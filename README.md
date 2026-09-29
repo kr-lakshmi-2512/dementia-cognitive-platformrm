@@ -150,7 +150,7 @@ cd frontend
 npm install
 
 # Start the Expo Web development server
-npm run web
+npx expo start --web --clear --offline
 ```
 
 > 🌐 **Frontend Application will open at:** `http://localhost:8081`
