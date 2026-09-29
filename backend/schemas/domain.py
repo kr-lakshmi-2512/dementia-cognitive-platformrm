@@ -15,6 +15,8 @@ class UserResponse(UserBase):
     id: int
     caregiver_id: Optional[int] = None
     doctor_id: Optional[int] = None
+    caregiver_name: Optional[str] = None
+    doctor_name: Optional[str] = None
     
     class Config:
         from_attributes = True

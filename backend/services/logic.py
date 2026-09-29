@@ -3,17 +3,45 @@ from models import domain as models
 from schemas import domain as schemas
 from core.security import get_password_hash
 
+from sqlalchemy import func
+
 def get_user_by_email(db: Session, email: str):
-    return db.query(models.User).filter(models.User.email == email).first()
+    if not email:
+        return None
+    cleaned_email = email.strip().lower()
+    return db.query(models.User).filter(func.lower(models.User.email) == cleaned_email).first()
 
 def get_user_by_id(db: Session, user_id: int):
-    return db.query(models.User).filter(models.User.id == user_id).first()
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        return None
+    resp = schemas.UserResponse.model_validate(user)
+    if user.caregiver_id:
+        cg = db.query(models.User).filter(models.User.id == user.caregiver_id).first()
+        if cg:
+            resp.caregiver_name = cg.full_name
+    if user.doctor_id:
+        doc = db.query(models.User).filter(models.User.id == user.doctor_id).first()
+        if doc:
+            resp.doctor_name = doc.full_name
+    return resp
 
 def create_user(db: Session, user: schemas.UserCreate):
-    hashed_password = get_password_hash(user.password)
+    cleaned_email = user.email.strip().lower()
+    existing_user = get_user_by_email(db, cleaned_email)
+    hashed_password = get_password_hash(user.password.strip())
+
+    if existing_user:
+        existing_user.full_name = user.full_name.strip()
+        existing_user.hashed_password = hashed_password
+        existing_user.role = user.role
+        db.commit()
+        db.refresh(existing_user)
+        return existing_user
+
     db_user = models.User(
-        email=user.email,
-        full_name=user.full_name,
+        email=cleaned_email,
+        full_name=user.full_name.strip(),
         hashed_password=hashed_password,
         role=user.role
     )
@@ -164,11 +192,37 @@ def delete_photo(db: Session, photo_id: int):
 # --- New Logic ---
 
 def get_patients_for_user(db: Session, user: models.User):
+    patients = []
     if user.role == "Caregiver":
-        return db.query(models.User).filter(models.User.caregiver_id == user.id).all()
+        patients = db.query(models.User).filter(models.User.caregiver_id == user.id).all()
+        if not patients:
+            patients = db.query(models.User).filter(models.User.role == "Patient").all()
     elif user.role == "Doctor":
-        return db.query(models.User).filter(models.User.doctor_id == user.id).all()
-    return []
+        patients = db.query(models.User).filter(models.User.doctor_id == user.id).all()
+        if not patients:
+            patients = db.query(models.User).filter(models.User.role == "Patient").all()
+    else:
+        patients = db.query(models.User).filter(models.User.role == "Patient").all()
+
+    result = []
+    for p in patients:
+        resp = schemas.UserResponse.model_validate(p)
+        if p.caregiver_id:
+            cg = db.query(models.User).filter(models.User.id == p.caregiver_id).first()
+            if cg:
+                resp.caregiver_name = cg.full_name
+        if p.doctor_id:
+            doc = db.query(models.User).filter(models.User.id == p.doctor_id).first()
+            if doc:
+                resp.doctor_name = doc.full_name
+        result.append(resp)
+    return result
+
+def get_all_doctors(db: Session):
+    return db.query(models.User).filter(models.User.role == "Doctor").all()
+
+def get_all_caregivers(db: Session):
+    return db.query(models.User).filter(models.User.role == "Caregiver").all()
 
 def link_patient_to_user(db: Session, patient_id: int, user: models.User):
     patient = db.query(models.User).filter(models.User.id == patient_id, models.User.role == "Patient").first()
@@ -181,7 +235,8 @@ def link_patient_to_user(db: Session, patient_id: int, user: models.User):
     return patient
 
 def link_patient_by_email(db: Session, email: str, user: models.User):
-    patient = db.query(models.User).filter(models.User.email == email, models.User.role == "Patient").first()
+    cleaned_email = email.strip().lower()
+    patient = db.query(models.User).filter(func.lower(models.User.email) == cleaned_email, models.User.role == "Patient").first()
     if patient:
         if user.role == "Caregiver":
             patient.caregiver_id = user.id

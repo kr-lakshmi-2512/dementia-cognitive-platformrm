@@ -119,7 +119,7 @@ export default function SettingsScreen({ navigation }) {
                     <View style={styles.teamItem}>
                         <Ionicons name="shield-checkmark" size={22} color="#10b981" />
                         <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={styles.teamName}>Lakshmi K R</Text>
+                            <Text style={styles.teamName}>{user?.caregiver_name || 'Unassigned Caregiver'}</Text>
                             <Text style={styles.teamRole}>Primary Caregiver</Text>
                         </View>
                     </View>
@@ -127,8 +127,8 @@ export default function SettingsScreen({ navigation }) {
                     <View style={styles.teamItem}>
                         <Ionicons name="medkit" size={22} color="#2563eb" />
                         <View style={{ flex: 1, marginLeft: 12 }}>
-                            <Text style={styles.teamName}>Dr. Pushpa H C</Text>
-                            <Text style={styles.teamRole}>Attending Neurologist</Text>
+                            <Text style={styles.teamName}>{user?.doctor_name || 'Unassigned Doctor'}</Text>
+                            <Text style={styles.teamRole}>Attending Neurologist / Physician</Text>
                         </View>
                     </View>
                 </View>

@@ -136,6 +136,16 @@ export const fetchCaregiverDailySummary = async (patientId) => {
     return response.data;
 };
 
+export const fetchDoctors = async () => {
+    const response = await client.get('/doctors');
+    return response.data;
+};
+
+export const fetchCaregivers = async () => {
+    const response = await client.get('/caregivers');
+    return response.data;
+};
+
 export const addReminder = async (title, timeStr) => {
     const response = await client.post('/add-reminder', {
         title,

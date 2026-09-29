@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
-    fetchPatientLocation, parseUTC, predictRisk, addReminder
+    fetchPatientLocation, parseUTC, predictRisk, addReminder, fetchDoctors
 } from '../api/client';
 
 // Helper function to synthesize emergency siren audio sound and speech alert
@@ -241,6 +241,14 @@ export default function CaregiverDashboard({ navigation }) {
         if (selectedChatUser) {
             loadConversation(selectedChatUser.id);
         }
+
+        const interval = setInterval(() => {
+            if (selectedChatUser) {
+                loadConversation(selectedChatUser.id);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
     }, [selectedChatUser]);
 
     const loadDashboardData = async () => {
@@ -268,11 +276,14 @@ export default function CaregiverDashboard({ navigation }) {
                 }
             }
 
-            const doctorIds = [...new Set(fetchedPatients.map((p) => p.doctor_id).filter(Boolean))];
-            const doctors = await Promise.all(doctorIds.map((dId) => getUserById(dId)));
-            setTeamMembers(doctors);
-            if (!selectedChatUser && doctors.length > 0) {
-                setSelectedChatUser(doctors[0]);
+            const allDoctors = await fetchDoctors();
+            setTeamMembers(allDoctors);
+            if (allDoctors.length > 0) {
+                const assignedDoctorId = fetchedPatients.find(p => p.doctor_id)?.doctor_id;
+                const assignedDoc = allDoctors.find(d => d.id === assignedDoctorId) || allDoctors[0];
+                if (!selectedChatUser || !allDoctors.some(d => d.id === selectedChatUser.id)) {
+                    setSelectedChatUser(assignedDoc);
+                }
             }
         } catch (error) {
             console.error('Failed to load caregiver data:', error);
@@ -786,7 +797,7 @@ export default function CaregiverDashboard({ navigation }) {
 
                 {selectedChatUser ? (
                     <View style={styles.chatBox}>
-                        <Text style={styles.chatHeader}>Chatting with Dr. {selectedChatUser.full_name}</Text>
+                        <Text style={styles.chatHeader}>Chatting with Dr. {selectedChatUser.full_name} ({selectedChatUser.email})</Text>
                         <FlatList
                             data={messages}
                             keyExtractor={(item) => item.id.toString()}
@@ -795,11 +806,17 @@ export default function CaregiverDashboard({ navigation }) {
                                 const isMine = item.sender_id === currentUser?.id;
                                 return (
                                     <View style={[styles.msgBubble, isMine ? styles.msgMine : styles.msgTheirs]}>
+                                        <Text style={[styles.msgSender, isMine ? { color: '#dcfce7' } : { color: '#64748b' }]}>
+                                            {isMine ? 'You (Caregiver)' : `Dr. ${selectedChatUser.full_name}`}
+                                        </Text>
                                         <Text style={[styles.msgContent, isMine && styles.whiteText]}>{item.content}</Text>
+                                        <Text style={[styles.msgTime, isMine ? { color: '#bbf7d0' } : { color: '#94a3b8' }]}>
+                                            {parseUTC(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </Text>
                                     </View>
                                 );
                             }}
-                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Send an update to the doctor.</Text>}
+                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Send an update to Dr. {selectedChatUser.full_name}.</Text>}
                         />
                         <View style={styles.inputRow}>
                             <TextInput
@@ -1035,7 +1052,9 @@ const styles = StyleSheet.create({
     msgBubble: { padding: 12, borderRadius: 14, marginBottom: 10, maxWidth: '85%' },
     msgMine: { alignSelf: 'flex-end', backgroundColor: '#16a34a' },
     msgTheirs: { alignSelf: 'flex-start', backgroundColor: '#f1f5f9' },
+    msgSender: { fontSize: 11, fontWeight: 'bold', marginBottom: 3 },
     msgContent: { fontSize: 13, color: '#0f172a', lineHeight: 18 },
+    msgTime: { fontSize: 10, marginTop: 4, textAlign: 'right', fontWeight: '500' },
 
     modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 },
     modalCard: { backgroundColor: 'white', borderRadius: 22, padding: 22 },

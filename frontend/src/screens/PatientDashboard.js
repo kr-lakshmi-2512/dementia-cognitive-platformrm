@@ -92,6 +92,9 @@ export default function PatientDashboard({ navigation }) {
     // Object Memory Finder Modal ("Where did I put it?")
     const [objectModal, setObjectModal]         = useState(false);
 
+    // Quick Care Team Contact Card Modal
+    const [careModal, setCareModal]             = useState(false);
+
     // ─── Level-Wise Cognitive Quiz Game ───
     const [gameModal,      setGameModal]      = useState(false);
     const [quizLevel,      setQuizLevel]      = useState(null);   // null | 'easy' | 'medium' | 'hard'
@@ -421,10 +424,73 @@ export default function PatientDashboard({ navigation }) {
         loopSpeech();
     };
 
+    // Dynamic Caregiver & Doctor Info strictly from database user profile
+    const caregiverName      = currentUser?.caregiver_name ? currentUser.caregiver_name : 'Unassigned Caregiver';
+    const doctorName         = currentUser?.doctor_name    ? currentUser.doctor_name    : 'Unassigned Doctor';
+    const caregiverFirstName = currentUser?.caregiver_name ? currentUser.caregiver_name.split(' ')[0] : 'Caregiver';
+    const doctorFirstName    = currentUser?.doctor_name    ? currentUser.doctor_name.split(' ')[0]    : 'Doctor';
+
+    // Dynamic timeline status based on real-time clock & database reminders
+    const getTimelineSlotData = () => {
+        const now = new Date();
+        const currentHour = now.getHours();
+
+        const morningRems   = reminders.filter(r => {
+            try { return parseUTC(r.time).getHours() < 12; } catch { return false; }
+        });
+        const afternoonRems = reminders.filter(r => {
+            try { const h = parseUTC(r.time).getHours(); return h >= 12 && h < 17; } catch { return false; }
+        });
+        const eveningRems   = reminders.filter(r => {
+            try { const h = parseUTC(r.time).getHours(); return h >= 17 && h < 21; } catch { return false; }
+        });
+
+        const morningCompleted   = morningRems.length > 0 && morningRems.every(r => r.is_completed);
+        const afternoonCompleted = afternoonRems.length > 0 && afternoonRems.every(r => r.is_completed);
+        const eveningCompleted   = eveningRems.length > 0 && eveningRems.every(r => r.is_completed);
+
+        return {
+            morning: {
+                label: 'Morning Meds',
+                time: '8:00 AM',
+                status: morningCompleted ? 'Done ✓' : (currentHour < 12 ? 'Active ⏰' : (morningRems.length > 0 ? 'Due' : 'Done ✓')),
+                color: morningCompleted ? '#10b981' : (currentHour < 12 ? '#3b82f6' : '#64748b'),
+                bg: morningCompleted ? '#f0fdf4' : (currentHour < 12 ? '#eff6ff' : '#f8fafc'),
+                borderColor: morningCompleted ? '#10b981' : (currentHour < 12 ? '#3b82f6' : '#cbd5e1')
+            },
+            afternoon: {
+                label: 'Memory Exercise',
+                time: '1:00 PM',
+                status: afternoonCompleted ? 'Done ✓' : (currentHour >= 12 && currentHour < 17 ? 'Active 🧠' : (currentHour < 12 ? 'Upcoming' : 'Done ✓')),
+                color: afternoonCompleted ? '#10b981' : (currentHour >= 12 && currentHour < 17 ? '#3b82f6' : '#64748b'),
+                bg: afternoonCompleted ? '#f0fdf4' : (currentHour >= 12 && currentHour < 17 ? '#eff6ff' : '#f8fafc'),
+                borderColor: afternoonCompleted ? '#10b981' : (currentHour >= 12 && currentHour < 17 ? '#3b82f6' : '#cbd5e1')
+            },
+            evening: {
+                label: 'Evening Meds',
+                time: '6:00 PM',
+                status: eveningCompleted ? 'Done ✓' : (currentHour >= 17 && currentHour < 21 ? 'Active ⏰' : (currentHour < 17 ? 'Scheduled' : 'Done ✓')),
+                color: eveningCompleted ? '#10b981' : (currentHour >= 17 && currentHour < 21 ? '#f59e0b' : '#64748b'),
+                bg: eveningCompleted ? '#f0fdf4' : (currentHour >= 17 && currentHour < 21 ? '#fffbeb' : '#f8fafc'),
+                borderColor: eveningCompleted ? '#10b981' : (currentHour >= 17 && currentHour < 21 ? '#f59e0b' : '#cbd5e1')
+            },
+            night: {
+                label: 'Night Rest',
+                time: '9:00 PM',
+                status: currentHour >= 21 ? 'Active 💤' : 'Scheduled',
+                color: currentHour >= 21 ? '#8b5cf6' : '#64748b',
+                bg: currentHour >= 21 ? '#f5f3ff' : '#f8fafc',
+                borderColor: currentHour >= 21 ? '#8b5cf6' : '#cbd5e1'
+            }
+        };
+    };
+
+    const timelineData = getTimelineSlotData();
+
     // 1-Tap "I NEED HELP REMEMBERING" Action
     const handleNeedHelpRemembering = async () => {
         stopRepeatingSpeech();
-        const greeting = `Hello ${currentUser?.full_name || 'Patient'}! I am your Memory Companion. You are completely safe in your home. Your caregiver Lakshmi K R and Dr. Pushpa set me up to help you remember everything.`;
+        const greeting = `Hello ${currentUser?.full_name || 'Patient'}! I am your Memory Companion. You are completely safe in your home. Your caregiver ${caregiverName} and ${doctorName} set me up to help you remember everything.`;
         setVoiceTitle("🧠 Memory Companion Active");
         setCompanionText(greeting);
         setVoiceModal(true);
@@ -438,7 +504,7 @@ export default function PatientDashboard({ navigation }) {
     // 3 DISTINCT COGNITIVE QUESTIONS & REASSURANCES
     const handleWhereAmI = () => {
         stopRepeatingSpeech();
-        const text = `You are safe at home in your residence, ${currentUser?.full_name || 'Patient'}. Your home safe zone is active, and your primary caregiver Lakshmi K R and Dr. Pushpa are assisting you.`;
+        const text = `You are safe at home in your residence, ${currentUser?.full_name || 'Patient'}. Your home safe zone is active, and your primary caregiver ${caregiverName} and ${doctorName} are assisting you.`;
         setVoiceTitle("📍 Location Guidance: Home Safe Zone");
         setCompanionText(text);
         setVoiceModal(true);
@@ -448,7 +514,7 @@ export default function PatientDashboard({ navigation }) {
 
     const handleWhatShouldIDo = () => {
         stopRepeatingSpeech();
-        const text = `Right now, you should take your scheduled morning medication. Caregiver Lakshmi K R and Dr. Pushpa are available to help you.`;
+        const text = `Right now, you should take your scheduled morning medication. Caregiver ${caregiverName} and ${doctorName} are available to help you.`;
         setVoiceTitle("⏰ Next Action: Take Morning Medicine");
         setCompanionText(text);
         setVoiceModal(true);
@@ -458,8 +524,8 @@ export default function PatientDashboard({ navigation }) {
 
     const handleWhoIsHelpingMe = () => {
         stopRepeatingSpeech();
-        const text = `Your caregiver Lakshmi K R manages your meals and medicine daily, and Dr. Pushpa H C oversees your medical and neurological health.`;
-        setVoiceTitle("👥 Your Care Team: Lakshmi & Dr. Pushpa");
+        const text = `Your caregiver ${caregiverName} manages your meals and medicine daily, and ${doctorName} oversees your medical and neurological health.`;
+        setVoiceTitle(`👥 Your Care Team: ${caregiverFirstName} & ${doctorFirstName}`);
         setCompanionText(text);
         setVoiceModal(true);
         setVoiceState('speaking');
@@ -504,14 +570,15 @@ export default function PatientDashboard({ navigation }) {
         playEmergencySirenSound();
         try {
             await triggerPanicAlert();
-            showAlert('🚨 EMERGENCY SOS SENT', `Immediate notification sent to Caregiver Lakshmi & Dr. Pushpa!\nPatient: ${currentUser?.full_name || 'Patient'}`);
+            showAlert('🚨 EMERGENCY SOS SENT', `Immediate notification sent to Caregiver ${caregiverName} & ${doctorName}!\nPatient: ${currentUser?.full_name || 'Patient'}`);
         } catch {
             showAlert('Emergency', 'Emergency signal dispatched to care team.');
         }
     };
 
     const handleCallCaregiver = () => {
-        showAlert('📞 Calling Caregiver', 'Connecting to your primary caregiver: Lakshmi K R');
+        setCareModal(true);
+        speak(`Opening Care Team contact options for ${caregiverName}.`);
     };
 
     const handleOpenWhereIsIt = () => {
@@ -528,8 +595,8 @@ export default function PatientDashboard({ navigation }) {
 
     const patientModules = [
         { title: 'Medication Schedule', icon: 'medkit', target: 'Medication', color: '#7c3aed', desc: 'View your complete daily routine' },
-        { title: 'Family Memory Directory', icon: 'people', target: 'Photos', color: '#be185d', desc: 'Recognize Rachana, Lakshmi & Dr. Pushpa' },
-        { title: 'Emergency Contacts', icon: 'call', target: 'Contacts', color: '#16a34a', desc: 'Doctor & Caregiver contacts' },
+        { title: 'Family Memory Directory', icon: 'people', target: 'Photos', color: '#be185d', desc: `Recognize ${caregiverFirstName}, family & ${doctorFirstName}` },
+        { title: 'Emergency Contacts', icon: 'call', target: 'Contacts', color: '#16a34a', desc: `Doctor & ${caregiverFirstName} contacts` },
     ];
 
     return (
@@ -661,6 +728,56 @@ export default function PatientDashboard({ navigation }) {
 
                         <TouchableOpacity style={styles.closeModalBtn} onPress={() => setObjectModal(false)}>
                             <Text style={styles.closeModalText}>CLOSE ASSISTANT</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* 👥 Care Team Quick Contact Card Modal */}
+            <Modal visible={careModal} transparent animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.objectModalCard, { maxWidth: 440, padding: 24 }]}>
+                        <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                            <View style={{ width: 68, height: 68, borderRadius: 34, backgroundColor: '#7c3aed', justifyContent: 'center', alignItems: 'center', marginBottom: 10, shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 }}>
+                                <Text style={{ fontSize: 30, color: 'white', fontWeight: 'bold' }}>
+                                    {caregiverFirstName.charAt(0)}
+                                </Text>
+                            </View>
+                            <Text style={styles.objectModalTitle}>{caregiverName}</Text>
+                            <Text style={styles.objectModalSub}>❤️ Primary Caregiver Connected</Text>
+                        </View>
+
+                        <View style={{ width: '100%', gap: 10, marginBottom: 16 }}>
+                            <TouchableOpacity
+                                style={{ backgroundColor: '#16a34a', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                                onPress={() => showAlert('📞 Phone Call', `Dialing primary caregiver ${caregiverName}...`)}
+                            >
+                                <Ionicons name="call" size={22} color="white" />
+                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>Call {caregiverFirstName} Directly</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{ backgroundColor: '#25d366', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                                onPress={() => {
+                                    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello ${caregiverName}, sending a check-in message from the Dementia Care platform.`)}`;
+                                    if (Platform.OS === 'web') window.open(url, '_blank');
+                                }}
+                            >
+                                <Ionicons name="logo-whatsapp" size={22} color="white" />
+                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>Send WhatsApp Message</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{ backgroundColor: '#2563eb', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                                onPress={() => showAlert('🩺 Attending Doctor', `Connecting to ${doctorName}...`)}
+                            >
+                                <Ionicons name="medkit" size={22} color="white" />
+                                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>Doctor: {doctorName}</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity style={styles.closeModalBtn} onPress={() => setCareModal(false)}>
+                            <Text style={styles.closeModalText}>CLOSE CONTACT CARD</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -875,12 +992,12 @@ export default function PatientDashboard({ navigation }) {
                     <View style={styles.orientationHeader}>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.dateLabel}>{todayDateStr}</Text>
-                            <Text style={styles.greetingText}>Good morning, {currentUser?.full_name || 'Rachana'} 👋</Text>
+                            <Text style={styles.greetingText}>Good morning, {currentUser?.full_name || 'Patient'} 👋</Text>
                             <Text style={styles.companionSub}>"I am your Memory Companion. I am here to help you today."</Text>
                         </View>
                         <TouchableOpacity style={styles.caregiverCallBtn} onPress={handleCallCaregiver}>
                             <Ionicons name="call" size={22} color="white" />
-                            <Text style={styles.caregiverCallText}>Call Lakshmi</Text>
+                            <Text style={styles.caregiverCallText}>Call {caregiverFirstName}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -888,7 +1005,15 @@ export default function PatientDashboard({ navigation }) {
                     <View style={styles.trustAnchorBox}>
                         <Ionicons name="heart-circle" size={32} color="#ec4899" />
                         <Text style={styles.trustAnchorText}>
-                            Your caregiver <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>Lakshmi K R</Text> and <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>Dr. Pushpa H C</Text> set up this Memory Helper so you always feel safe and supported.
+                            {currentUser?.caregiver_name || currentUser?.doctor_name ? (
+                                <>
+                                    Your care team {currentUser?.caregiver_name ? <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>{currentUser.caregiver_name}</Text> : ''}
+                                    {currentUser?.caregiver_name && currentUser?.doctor_name ? ' and ' : ''}
+                                    {currentUser?.doctor_name ? <Text style={{ fontWeight: 'bold', color: '#1e1b4b' }}>{currentUser.doctor_name}</Text> : ''} set up this Memory Helper so you always feel safe and supported.
+                                </>
+                            ) : (
+                                "Your assigned Caregiver and Doctor will appear here once connected to your account."
+                            )}
                         </Text>
                     </View>
 
@@ -918,7 +1043,7 @@ export default function PatientDashboard({ navigation }) {
 
                         <View style={styles.summaryCard}>
                             <Ionicons name="heart" size={24} color="#ec4899" />
-                            <Text style={styles.summaryValue}>Lakshmi K R</Text>
+                            <Text style={styles.summaryValue}>{caregiverName}</Text>
                             <Text style={styles.summaryTitle}>❤️ Caregiver Connected</Text>
                         </View>
                     </View>
@@ -932,6 +1057,57 @@ export default function PatientDashboard({ navigation }) {
                         <Text style={styles.bigMemoryHelpSub}>Tap here anytime you feel confused or lost</Text>
                     </View>
                 </TouchableOpacity>
+
+                {/* 🌅 VISUAL DAILY ROUTINE & MEDICATION TIMELINE */}
+                <View style={{ width: '100%', backgroundColor: 'white', borderRadius: 24, padding: 18, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.7)', shadowColor: '#7c3aed', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16, elevation: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                        <Ionicons name="time" size={22} color="#7c3aed" />
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a' }}>📅 Daily Routine & Medication Timeline</Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 14, fontWeight: '500' }}>Live step-by-step routine progress for today</Text>
+
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        {/* Morning Slot */}
+                        <View style={{ flex: 1, minWidth: 100, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: timelineData.morning.borderColor, backgroundColor: timelineData.morning.bg, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 22 }}>🌅</Text>
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>{timelineData.morning.time}</Text>
+                            <Text style={{ fontSize: 11, color: '#475569', textAlign: 'center', marginTop: 2, fontWeight: '600' }}>{timelineData.morning.label}</Text>
+                            <View style={{ backgroundColor: timelineData.morning.color, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: 6 }}>
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{timelineData.morning.status}</Text>
+                            </View>
+                        </View>
+
+                        {/* Afternoon Slot */}
+                        <View style={{ flex: 1, minWidth: 100, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: timelineData.afternoon.borderColor, backgroundColor: timelineData.afternoon.bg, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 22 }}>☀️</Text>
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>{timelineData.afternoon.time}</Text>
+                            <Text style={{ fontSize: 11, color: '#475569', textAlign: 'center', marginTop: 2, fontWeight: '600' }}>{timelineData.afternoon.label}</Text>
+                            <View style={{ backgroundColor: timelineData.afternoon.color, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: 6 }}>
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{timelineData.afternoon.status}</Text>
+                            </View>
+                        </View>
+
+                        {/* Evening Slot */}
+                        <View style={{ flex: 1, minWidth: 100, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: timelineData.evening.borderColor, backgroundColor: timelineData.evening.bg, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 22 }}>🌆</Text>
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>{timelineData.evening.time}</Text>
+                            <Text style={{ fontSize: 11, color: '#475569', textAlign: 'center', marginTop: 2, fontWeight: '600' }}>{timelineData.evening.label}</Text>
+                            <View style={{ backgroundColor: timelineData.evening.color, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: 6 }}>
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{timelineData.evening.status}</Text>
+                            </View>
+                        </View>
+
+                        {/* Night Slot */}
+                        <View style={{ flex: 1, minWidth: 100, borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: timelineData.night.borderColor, backgroundColor: timelineData.night.bg, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 22 }}>🌙</Text>
+                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#0f172a', marginTop: 4 }}>{timelineData.night.time}</Text>
+                            <Text style={{ fontSize: 11, color: '#475569', textAlign: 'center', marginTop: 2, fontWeight: '600' }}>{timelineData.night.label}</Text>
+                            <View style={{ backgroundColor: timelineData.night.color, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginTop: 6 }}>
+                                <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{timelineData.night.status}</Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
 
                 {/* 3. Advanced AIML Object Finder & Brain Game Row */}
                 <View style={styles.aimlRow}>

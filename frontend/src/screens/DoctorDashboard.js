@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
     fetchConversation, fetchPatients, getUserById, getUserRole,
-    sendMessage, predictRisk, linkPatientByEmail, parseUTC
+    sendMessage, predictRisk, linkPatientByEmail, parseUTC, fetchCaregivers
 } from '../api/client';
 
 // Helper function to generate dynamic behavior & risk graph telemetry per patient for Doctor
@@ -92,7 +92,9 @@ export default function DoctorDashboard() {
     const [currentUser, setCurrentUser]             = useState(null);
     const [patients, setPatients]                   = useState([]);
     const [caregiverMap, setCaregiverMap]           = useState({});
+    const [caregiverList, setCaregiverList]         = useState([]);
     const [selectedPatient, setSelectedPatient]     = useState(null);
+    const [selectedChatCaregiver, setSelectedChatCaregiver] = useState(null);
     const [messages, setMessages]                   = useState([]);
     const [draftMessage, setDraftMessage]           = useState('');
     const [linkPatientEmail, setLinkPatientEmail]   = useState('');
@@ -102,8 +104,6 @@ export default function DoctorDashboard() {
     const [loadingAi, setLoadingAi]                 = useState(false);
     const [activeTab, setActiveTab]                 = useState('overview');
 
-    const selectedCaregiver = selectedPatient ? caregiverMap[selectedPatient.caregiver_id] : null;
-
     useEffect(() => {
         loadDashboardData();
     }, []);
@@ -111,13 +111,27 @@ export default function DoctorDashboard() {
     useEffect(() => {
         if (selectedPatient) {
             runPatientAiAnalysis(selectedPatient.id);
+            if (selectedPatient.caregiver_id && caregiverMap[selectedPatient.caregiver_id]) {
+                setSelectedChatCaregiver(caregiverMap[selectedPatient.caregiver_id]);
+            }
         }
-        if (selectedCaregiver) {
-            loadConversation(selectedCaregiver.id);
+    }, [selectedPatient, caregiverMap]);
+
+    useEffect(() => {
+        if (selectedChatCaregiver) {
+            loadConversation(selectedChatCaregiver.id);
         } else {
             setMessages([]);
         }
-    }, [selectedPatient, selectedCaregiver]);
+
+        const interval = setInterval(() => {
+            if (selectedChatCaregiver) {
+                loadConversation(selectedChatCaregiver.id);
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [selectedChatCaregiver]);
 
     const patientsWithCaregivers = useMemo(
         () =>
@@ -130,20 +144,28 @@ export default function DoctorDashboard() {
 
     const loadDashboardData = async () => {
         try {
-            const [user, fetchedPatients] = await Promise.all([getUserRole(), fetchPatients()]);
+            const [user, fetchedPatients, allCaregivers] = await Promise.all([
+                getUserRole(),
+                fetchPatients(),
+                fetchCaregivers()
+            ]);
             setCurrentUser(user);
             setPatients(fetchedPatients);
+            setCaregiverList(allCaregivers);
 
-            const caregiverIds = [...new Set(fetchedPatients.map((p) => p.caregiver_id).filter(Boolean))];
-            const caregivers = await Promise.all(caregiverIds.map((cId) => getUserById(cId)));
-            const lookup = caregivers.reduce((acc, c) => {
+            const lookup = allCaregivers.reduce((acc, c) => {
                 acc[c.id] = c;
                 return acc;
             }, {});
             setCaregiverMap(lookup);
 
-            if (fetchedPatients.length > 0) {
+            if (fetchedPatients.length > 0 && !selectedPatient) {
                 setSelectedPatient(fetchedPatients[0]);
+            }
+
+            if (allCaregivers.length > 0 && !selectedChatCaregiver) {
+                const initialCg = (fetchedPatients[0]?.caregiver_id && lookup[fetchedPatients[0].caregiver_id]) || allCaregivers[0];
+                setSelectedChatCaregiver(initialCg);
             }
         } catch (error) {
             console.error('Failed to load doctor dashboard:', error);
@@ -173,11 +195,11 @@ export default function DoctorDashboard() {
     };
 
     const handleSendMessage = async () => {
-        if (!selectedCaregiver || !draftMessage.trim()) return;
+        if (!selectedChatCaregiver || !draftMessage.trim()) return;
         try {
-            await sendMessage(selectedCaregiver.id, draftMessage.trim());
+            await sendMessage(selectedChatCaregiver.id, draftMessage.trim());
             setDraftMessage('');
-            loadConversation(selectedCaregiver.id);
+            loadConversation(selectedChatCaregiver.id);
         } catch (error) {
             Alert.alert('Chat Error', 'Message could not be sent.');
         }
@@ -507,12 +529,34 @@ export default function DoctorDashboard() {
             )}
 
             {/* Caregiver Coordination & Chat */}
-            {selectedCaregiver ? (
-                <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>💬 Direct Caregiver Consultation</Text>
-                    <Text style={styles.patientSubLabel}>Caregiver: {selectedCaregiver.full_name} ({selectedCaregiver.email})</Text>
+            <View style={styles.sectionCard}>
+                <Text style={styles.sectionTitle}>💬 Direct Caregiver Consultation</Text>
+                
+                {/* Horizontal Caregiver Selection Chips */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 12 }}>
+                    {caregiverList.map((cg) => (
+                        <TouchableOpacity
+                            key={cg.id}
+                            style={[
+                                styles.patientPill,
+                                selectedChatCaregiver?.id === cg.id && styles.patientPillActive,
+                                { paddingVertical: 8, paddingHorizontal: 12 }
+                            ]}
+                            onPress={() => setSelectedChatCaregiver(cg)}
+                        >
+                            <Ionicons name="shield-checkmark" size={16} color={selectedChatCaregiver?.id === cg.id ? 'white' : '#7c3aed'} style={{ marginRight: 4 }} />
+                            <Text style={[styles.patientPillName, selectedChatCaregiver?.id === cg.id && styles.whiteText, { fontSize: 13 }]}>
+                                Caregiver: {cg.full_name}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
 
+                {selectedChatCaregiver ? (
                     <View style={styles.chatContainer}>
+                        <Text style={styles.patientSubLabel}>
+                            Active Conversation with Caregiver: {selectedChatCaregiver.full_name} ({selectedChatCaregiver.email})
+                        </Text>
                         <FlatList
                             data={messages}
                             keyExtractor={(item) => item.id.toString()}
@@ -521,7 +565,7 @@ export default function DoctorDashboard() {
                                 const isMine = item.sender_id === currentUser?.id;
                                 return (
                                     <View style={[styles.msgBubble, isMine ? styles.msgMine : styles.msgTheirs]}>
-                                        <Text style={styles.msgSender}>{isMine ? 'You (Doctor)' : selectedCaregiver.full_name}</Text>
+                                        <Text style={styles.msgSender}>{isMine ? 'You (Doctor)' : selectedChatCaregiver.full_name}</Text>
                                         <Text style={[styles.msgContent, isMine && styles.whiteText]}>{item.content}</Text>
                                         <Text style={[styles.msgTime, isMine && styles.lightText]}>
                                             {parseUTC(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -529,7 +573,7 @@ export default function DoctorDashboard() {
                                     </View>
                                 );
                             }}
-                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Send a note to the caregiver below.</Text>}
+                            ListEmptyComponent={<Text style={styles.emptyText}>No messages yet. Send a note to caregiver {selectedChatCaregiver.full_name} below.</Text>}
                         />
 
                         <View style={styles.inputRow}>
@@ -537,7 +581,7 @@ export default function DoctorDashboard() {
                                 style={styles.textInput}
                                 value={draftMessage}
                                 onChangeText={setDraftMessage}
-                                placeholder="Type medical instructions for caregiver..."
+                                placeholder={`Type medical instructions for ${selectedChatCaregiver.full_name}...`}
                                 placeholderTextColor="#888"
                             />
                             <TouchableOpacity style={styles.actionBtn} onPress={handleSendMessage}>
@@ -545,13 +589,10 @@ export default function DoctorDashboard() {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
-            ) : selectedPatient ? (
-                <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>💬 Caregiver Chat</Text>
-                    <Text style={styles.emptyText}>No caregiver is currently linked to {selectedPatient.full_name}.</Text>
-                </View>
-            ) : null}
+                ) : (
+                    <Text style={styles.emptyText}>No caregivers found in system.</Text>
+                )}
+            </View>
 
             <View style={{ height: 80 }} />
         </ScrollView>

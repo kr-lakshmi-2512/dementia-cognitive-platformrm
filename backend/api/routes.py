@@ -192,6 +192,14 @@ def delete_photo(photo_id: int, current_user: models.User = Depends(get_current_
 def get_patients(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return services.get_patients_for_user(db, current_user)
 
+@router.get("/doctors", response_model=List[schemas.UserResponse])
+def get_doctors(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.get_all_doctors(db)
+
+@router.get("/caregivers", response_model=List[schemas.UserResponse])
+def get_caregivers(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.get_all_caregivers(db)
+
 @router.get("/users/{user_id}", response_model=schemas.UserResponse)
 def get_user(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     user = services.get_user_by_id(db, user_id)

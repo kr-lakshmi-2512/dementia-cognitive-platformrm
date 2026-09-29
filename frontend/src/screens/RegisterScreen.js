@@ -31,7 +31,18 @@ export default function RegisterScreen({ navigation }) {
         setLoading(true);
         try {
             await registerUser(fullName, email, password, role);
-            showGlobalAlert('Success', 'Account created! Please log in.');
+            if (Platform.OS === 'web') {
+                if (role === 'Patient') {
+                    localStorage.setItem('last_patient_email', email.trim());
+                    localStorage.setItem('last_patient_pass', password.trim());
+                    localStorage.setItem('last_patient_name', fullName.trim());
+                }
+                localStorage.setItem('last_registered_email', email.trim());
+                localStorage.setItem('last_registered_pass', password.trim());
+                localStorage.setItem('last_registered_name', fullName.trim());
+                localStorage.setItem('last_registered_role', role);
+            }
+            showGlobalAlert('Success', `Account created for ${fullName}! Instant Patient Login will now log in with this account.`);
             navigation.navigate('Login');
         } catch (error) {
             showGlobalAlert('Registration Failed', error.response?.data?.detail || 'An error occurred. Check email formatting.');
