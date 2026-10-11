@@ -108,6 +108,8 @@ export default function DoctorDashboard() {
 
     useEffect(() => {
         loadDashboardData();
+        const pollInterval = setInterval(loadDashboardData, 8000);
+        return () => clearInterval(pollInterval);
     }, []);
 
     useEffect(() => {

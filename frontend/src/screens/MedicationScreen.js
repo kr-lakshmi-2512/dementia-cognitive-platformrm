@@ -38,6 +38,8 @@ export default function MedicationScreen({ navigation }) {
 
     useEffect(() => {
         initialize();
+        const pollInterval = setInterval(loadReminders, 6000);
+        return () => clearInterval(pollInterval);
     }, []);
 
     const initialize = async () => {

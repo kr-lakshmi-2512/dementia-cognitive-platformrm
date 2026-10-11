@@ -325,6 +325,8 @@ export default function PatientDashboard({ navigation }) {
     useEffect(() => {
         loadDashboard();
         autoTrackLocation();
+        const pollInterval = setInterval(loadDashboard, 7000);
+        return () => clearInterval(pollInterval);
     }, []);
 
     useEffect(() => {

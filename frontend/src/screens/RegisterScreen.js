@@ -53,7 +53,12 @@ export default function RegisterScreen({ navigation }) {
 
     return (
         <LinearGradient colors={['#0f172a', '#1e1b4b', '#0f172a']} style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.card}>
                     {/* Header */}
                     <Text style={styles.title}>Create Account</Text>
@@ -152,20 +157,22 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
+    container: { flex: 1, width: '100%', height: '100%' },
+    scrollView: { flex: 1, width: '100%' },
     scrollContent: { 
         flexGrow: 1, 
-        justifyContent: 'center', 
         alignItems: 'center', 
-        paddingVertical: 40,
-        paddingHorizontal: 20 
+        paddingVertical: 20,
+        paddingHorizontal: 16,
+        paddingBottom: 48
     },
     card: { 
         width: '100%', 
-        maxWidth: 480, 
+        maxWidth: 460, 
         backgroundColor: 'rgba(255, 255, 255, 0.98)', 
-        borderRadius: 32, 
-        padding: 36, 
+        borderRadius: 28, 
+        padding: 22, 
+        marginVertical: 'auto',
         alignItems: 'center', 
         shadowColor: '#7c3aed', 
         shadowOffset: { width: 0, height: 16 }, 

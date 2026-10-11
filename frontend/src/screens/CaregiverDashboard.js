@@ -234,7 +234,7 @@ export default function CaregiverDashboard({ navigation }) {
 
     useEffect(() => {
         loadDashboardData();
-        const interval = setInterval(loadDashboardData, 15000);
+        const interval = setInterval(loadDashboardData, 6000);
         return () => clearInterval(interval);
     }, []);
 
@@ -656,31 +656,34 @@ export default function CaregiverDashboard({ navigation }) {
                         return (
                             <View key={patient.id} style={styles.patientCard}>
                                 <View style={styles.patientCardTop}>
-                                    <View style={styles.avatarCircle}>
-                                        <Ionicons name="person" size={32} color="#7c3aed" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 16 }}>
-                                        <Text style={styles.patientName}>{patient.full_name}</Text>
-                                        <Text style={styles.patientEmail}>{patient.email}</Text>
-                                    </View>
-                                    {ai && (
-                                        <View style={[styles.aiBadge, { backgroundColor: ai.score >= 40 ? '#fee2e2' : '#d1fae5' }]}>
-                                            <Text style={[styles.aiBadgeText, { color: ai.score >= 40 ? '#dc2626' : '#065f46' }]}>
-                                                🧠 AI Risk: {ai.score}%
-                                            </Text>
+                                    {/* Patient Info Block with ample width */}
+                                    <View style={styles.patientInfoBlock}>
+                                        <View style={styles.avatarCircle}>
+                                            <Ionicons name="person" size={24} color="#7c3aed" />
                                         </View>
-                                    )}
-                                    <TouchableOpacity
-                                        style={{
-                                            flexDirection: 'row', alignItems: 'center', gap: 4,
-                                            backgroundColor: '#fee2e2', borderRadius: 10,
-                                            paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8,
-                                        }}
-                                        onPress={() => handleRemovePatient(patient)}
-                                    >
-                                        <Ionicons name="trash-outline" size={16} color="#dc2626" />
-                                        <Text style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 12 }}>Remove</Text>
-                                    </TouchableOpacity>
+                                        <View style={styles.patientDetails}>
+                                            <Text style={styles.patientName} numberOfLines={1}>{patient.full_name}</Text>
+                                            <Text style={styles.patientEmail} numberOfLines={1}>{patient.email}</Text>
+                                        </View>
+                                    </View>
+
+                                    {/* Badges & Actions Block */}
+                                    <View style={styles.patientBadgeBlock}>
+                                        {ai && (
+                                            <View style={[styles.aiBadge, { backgroundColor: ai.score >= 40 ? '#fee2e2' : '#d1fae5' }]}>
+                                                <Text style={[styles.aiBadgeText, { color: ai.score >= 40 ? '#dc2626' : '#065f46' }]}>
+                                                    🧠 AI Risk: {ai.score}%
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <TouchableOpacity
+                                            style={styles.removePatientBtn}
+                                            onPress={() => handleRemovePatient(patient)}
+                                        >
+                                            <Ionicons name="trash-outline" size={14} color="#dc2626" />
+                                            <Text style={styles.removePatientText}>Remove</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
 
                                 {/* AI Summary Box */}
@@ -1010,11 +1013,47 @@ const styles = StyleSheet.create({
         backgroundColor: '#f8fafc', borderRadius: 18, padding: 16, marginBottom: 14,
         borderWidth: 1.5, borderColor: '#e2e8f0'
     },
-    patientCardTop: { flexDirection: 'row', alignItems: 'center' },
-    avatarCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
-    patientName: { fontSize: 16, fontWeight: 'bold', color: '#0f172a' },
-    patientEmail: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-    aiBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+    patientCardTop: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 4
+    },
+    patientInfoBlock: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        minWidth: 180,
+    },
+    patientDetails: {
+        marginLeft: 10,
+        flex: 1,
+    },
+    patientBadgeBlock: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    removePatientBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#fee2e2',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+    },
+    removePatientText: {
+        color: '#dc2626',
+        fontWeight: 'bold',
+        fontSize: 11,
+    },
+    avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
+    patientName: { fontSize: 15, fontWeight: 'bold', color: '#0f172a' },
+    patientEmail: { fontSize: 12, color: '#6b7280', marginTop: 1 },
+    aiBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
     aiBadgeText: { fontWeight: 'bold', fontSize: 11 },
 
     aiSummaryBox: { backgroundColor: '#f1f5f9', padding: 12, borderRadius: 14, marginTop: 10 },
