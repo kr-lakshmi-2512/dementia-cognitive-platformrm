@@ -7,7 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
-    fetchPatientLocation, parseUTC, predictRisk, addReminder, fetchDoctors
+    fetchPatientLocation, parseUTC, predictRisk, addReminder, fetchDoctors,
+    unlinkPatient
 } from '../api/client';
 
 // Helper function to synthesize emergency siren audio sound and speech alert
@@ -331,7 +332,12 @@ export default function CaregiverDashboard({ navigation }) {
     };
 
     const handleRemovePatient = (patient) => {
-        const confirmRemove = () => {
+        const confirmRemove = async () => {
+            try {
+                await unlinkPatient(patient.id);
+            } catch (err) {
+                console.log('Backend unlink error:', err);
+            }
             setRemovedPatientIds(prev => [...prev, patient.id]);
             setPatients(prev => prev.filter(p => p.id !== patient.id));
             if (Platform.OS === 'web') {

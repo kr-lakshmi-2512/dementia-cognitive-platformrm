@@ -246,6 +246,17 @@ def link_patient_by_email(db: Session, email: str, user: models.User):
         db.refresh(patient)
     return patient
 
+def unlink_patient_from_user(db: Session, patient_id: int, user: models.User):
+    patient = db.query(models.User).filter(models.User.id == patient_id, models.User.role == "Patient").first()
+    if patient:
+        if user.role == "Caregiver":
+            patient.caregiver_id = None
+        elif user.role == "Doctor":
+            patient.doctor_id = None
+        db.commit()
+        db.refresh(patient)
+    return patient
+
 def create_message(db: Session, message: schemas.MessageCreate, sender_id: int):
     db_message = models.Message(**message.model_dump(), sender_id=sender_id)
     db.add(db_message)

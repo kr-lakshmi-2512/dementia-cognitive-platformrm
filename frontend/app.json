@@ -5,6 +5,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.dementiacare.platform",
+      "adaptiveIcon": {
+        "backgroundColor": "#1a0b2e"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
     "plugins": [
       "expo-secure-store"
     ],

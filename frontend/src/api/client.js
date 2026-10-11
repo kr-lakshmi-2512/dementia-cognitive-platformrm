@@ -2,7 +2,31 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const API_URL = 'http://localhost:8001/api/v1';
+export const getApiBaseUrl = () => {
+    // 1. Explicit environment variable (for EAS builds, docker, custom domains)
+    if (typeof process !== 'undefined' && process.env && process.env.EXPO_PUBLIC_API_URL) {
+        return process.env.EXPO_PUBLIC_API_URL;
+    }
+
+    // 2. Browser environment (web & mobile web on phones)
+    if (typeof window !== 'undefined' && window.location) {
+        const { hostname, protocol, port, origin } = window.location;
+        // If served unified on the same backend port (e.g. 8001, 80, 443, or cloud domain)
+        if (port === '8001' || port === '80' || port === '443' || port === '') {
+            return `${origin}/api/v1`;
+        }
+        // If running in development (e.g. Expo web on port 8081)
+        // Dynamically connect to the host computer's backend on port 8001 so phones on LAN work!
+        if (hostname) {
+            return `${protocol}//${hostname}:8001/api/v1`;
+        }
+    }
+
+    // 3. Fallback for native emulators or offline
+    return 'http://localhost:8001/api/v1';
+};
+
+export const API_URL = getApiBaseUrl();
 
 const client = axios.create({
     baseURL: API_URL,
@@ -260,6 +284,11 @@ export const fetchPatientLocation = async (patientId) => {
 
 export const linkPatientByEmail = async (email) => {
     const response = await client.post(`/link-patient-by-email?email=${encodeURIComponent(email)}`);
+    return response.data;
+};
+
+export const unlinkPatient = async (patientId) => {
+    const response = await client.post(`/unlink-patient/${patientId}`);
     return response.data;
 };
 

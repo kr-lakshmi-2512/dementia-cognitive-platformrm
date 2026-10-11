@@ -218,6 +218,10 @@ def link_patient_by_email(email: str, current_user: models.User = Depends(get_cu
         raise HTTPException(status_code=404, detail="Patient account not found with this email")
     return result
 
+@router.post("/unlink-patient/{patient_id}")
+def unlink_patient(patient_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return services.unlink_patient_from_user(db, patient_id, current_user)
+
 @router.post("/messages", response_model=schemas.MessageResponse)
 def send_message(message_in: schemas.MessageCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return services.create_message(db, message=message_in, sender_id=current_user.id)

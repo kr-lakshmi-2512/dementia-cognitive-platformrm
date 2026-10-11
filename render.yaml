@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: dementia-care-platform
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/openapi.json
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000

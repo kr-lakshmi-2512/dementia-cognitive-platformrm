@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity,
-    ScrollView, Platform, Modal, Animated
+    ScrollView, Platform, Modal, Animated, Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -760,7 +760,11 @@ export default function PatientDashboard({ navigation }) {
                                 style={{ backgroundColor: '#25d366', paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }}
                                 onPress={() => {
                                     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(`Hello ${caregiverName}, sending a check-in message from the Dementia Care platform.`)}`;
-                                    if (Platform.OS === 'web') window.open(url, '_blank');
+                                    if (Platform.OS === 'web') {
+                                        window.open(url, '_blank');
+                                    } else {
+                                        Linking.openURL(url).catch(() => showAlert('WhatsApp', 'Unable to open WhatsApp on this device.'));
+                                    }
                                 }}
                             >
                                 <Ionicons name="logo-whatsapp" size={22} color="white" />

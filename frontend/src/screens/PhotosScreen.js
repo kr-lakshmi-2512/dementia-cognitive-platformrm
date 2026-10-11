@@ -6,10 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 const SCREEN_H = Dimensions.get('window').height;
-const API      = 'http://localhost:8001/api/v1';
+import { API_URL as API } from '../api/client';
 
 const speak = (text) => {
-    if (Platform.OS === 'web' && window.speechSynthesis) {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         const u = new window.SpeechSynthesisUtterance(text);
         u.lang = 'en-IN'; u.rate = 0.88;
@@ -18,8 +18,22 @@ const speak = (text) => {
 };
 
 const MEMBERS_KEY = 'fmd_members_v6';
-const rd = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
-const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const rd = (k) => {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            const v = window.localStorage.getItem(k);
+            return v ? JSON.parse(v) : null;
+        }
+    } catch (_) {}
+    return null;
+};
+const wr = (k, v) => {
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            window.localStorage.setItem(k, JSON.stringify(v));
+        }
+    } catch (_) {}
+};
 
 /* Capture video → JPEG Blob */
 const captureBlob = (videoEl) => new Promise((resolve) => {

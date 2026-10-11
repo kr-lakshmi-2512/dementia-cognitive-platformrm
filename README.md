@@ -105,8 +105,8 @@ dementia-care-platform/
 ### Step 1: Clone the Repository
 
 ```powershell
-git clone https://github.com/rachanadn27-boop/dementia-cognitive-platform.git
-cd dementia-cognitive-platform
+git clone https://github.com/kr-lakshmi-2512/dementia-cognitive-platformrm.git
+cd dementia-cognitive-platformrm
 ```
 
 ---
@@ -130,11 +130,11 @@ python -m venv venv
 pip install -r requirements.txt
 
 # Start the FastAPI backend server
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
+python -m uvicorn main:app --host 127.0.0.1 --port 8001
 ```
 
-> 🟢 **Backend API will run at:** `http://127.0.0.1:8000`  
-> 📖 **Interactive Swagger Docs at:** `http://127.0.0.1:8000/docs`
+> 🟢 **Backend API will run at:** `http://127.0.0.1:8001`  
+> 📖 **Interactive Swagger Docs at:** `http://127.0.0.1:8001/docs`
 
 ---
 

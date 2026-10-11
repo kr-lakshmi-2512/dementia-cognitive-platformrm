@@ -6,7 +6,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import {
     fetchConversation, fetchPatients, getUserById, getUserRole,
-    sendMessage, predictRisk, linkPatientByEmail, parseUTC, fetchCaregivers
+    sendMessage, predictRisk, linkPatientByEmail, parseUTC, fetchCaregivers,
+    unlinkPatient
 } from '../api/client';
 
 // Helper function to generate dynamic behavior & risk graph telemetry per patient for Doctor
@@ -98,6 +99,7 @@ export default function DoctorDashboard() {
     const [messages, setMessages]                   = useState([]);
     const [draftMessage, setDraftMessage]           = useState('');
     const [linkPatientEmail, setLinkPatientEmail]   = useState('');
+    const [removedPatientIds, setRemovedPatientIds] = useState([]);
     
     // AI & Clinical Logs
     const [aiResult, setAiResult]                   = useState(null);
@@ -135,11 +137,13 @@ export default function DoctorDashboard() {
 
     const patientsWithCaregivers = useMemo(
         () =>
-            patients.map((patient) => ({
-                ...patient,
-                caregiver: patient.caregiver_id ? caregiverMap[patient.caregiver_id] : null
-            })),
-        [patients, caregiverMap]
+            patients
+                .filter((p) => !removedPatientIds.includes(p.id))
+                .map((patient) => ({
+                    ...patient,
+                    caregiver: patient.caregiver_id ? caregiverMap[patient.caregiver_id] : null
+                })),
+        [patients, caregiverMap, removedPatientIds]
     );
 
     const loadDashboardData = async () => {
@@ -149,8 +153,9 @@ export default function DoctorDashboard() {
                 fetchPatients(),
                 fetchCaregivers()
             ]);
+            const activePatients = fetchedPatients.filter(p => !removedPatientIds.includes(p.id));
             setCurrentUser(user);
-            setPatients(fetchedPatients);
+            setPatients(activePatients);
             setCaregiverList(allCaregivers);
 
             const lookup = allCaregivers.reduce((acc, c) => {
@@ -159,17 +164,35 @@ export default function DoctorDashboard() {
             }, {});
             setCaregiverMap(lookup);
 
-            if (fetchedPatients.length > 0 && !selectedPatient) {
-                setSelectedPatient(fetchedPatients[0]);
+            if (activePatients.length > 0 && (!selectedPatient || !activePatients.some(p => p.id === selectedPatient.id))) {
+                setSelectedPatient(activePatients[0]);
+            } else if (activePatients.length === 0) {
+                setSelectedPatient(null);
             }
 
             if (allCaregivers.length > 0 && !selectedChatCaregiver) {
-                const initialCg = (fetchedPatients[0]?.caregiver_id && lookup[fetchedPatients[0].caregiver_id]) || allCaregivers[0];
+                const initialCg = (activePatients[0]?.caregiver_id && lookup[activePatients[0].caregiver_id]) || allCaregivers[0];
                 setSelectedChatCaregiver(initialCg);
             }
         } catch (error) {
             console.error('Failed to load doctor dashboard:', error);
         }
+    };
+
+    const handleRemovePatient = async (patient) => {
+        try {
+            await unlinkPatient(patient.id);
+        } catch (err) {
+            console.log('Backend unlink error:', err);
+        }
+        setRemovedPatientIds(prev => [...prev, patient.id]);
+        setPatients(prev => {
+            const nextList = prev.filter(p => p.id !== patient.id);
+            if (selectedPatient?.id === patient.id) {
+                setSelectedPatient(nextList.length > 0 ? nextList[0] : null);
+            }
+            return nextList;
+        });
     };
 
     const runPatientAiAnalysis = async (patientId) => {
@@ -415,20 +438,37 @@ export default function DoctorDashboard() {
                     renderItem={({ item }) => {
                         const isSelected = selectedPatient?.id === item.id;
                         return (
-                            <TouchableOpacity
-                                style={[styles.patientPill, isSelected && styles.patientPillActive]}
-                                onPress={() => setSelectedPatient(item)}
-                            >
-                                <Ionicons name="person-circle" size={48} color={isSelected ? 'white' : '#7c3aed'} />
-                                <View style={{ marginLeft: 14 }}>
-                                    <Text style={[styles.patientPillName, isSelected && styles.whiteText]}>
-                                        {item.full_name}
+                            <View style={[styles.patientPill, isSelected && styles.patientPillActive]}>
+                                <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                                    onPress={() => setSelectedPatient(item)}
+                                >
+                                    <Ionicons name="person-circle" size={44} color={isSelected ? 'white' : '#7c3aed'} />
+                                    <View style={{ marginLeft: 10, marginRight: 8, flex: 1 }}>
+                                        <Text style={[styles.patientPillName, isSelected && styles.whiteText]} numberOfLines={1}>
+                                            {item.full_name}
+                                        </Text>
+                                        <Text style={[styles.patientPillSub, isSelected && styles.lightText]} numberOfLines={1}>
+                                            Caregiver: {item.caregiver ? item.caregiver.full_name : 'Not assigned'}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={{
+                                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                                        backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : '#fee2e2',
+                                        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
+                                        borderWidth: 1, borderColor: isSelected ? 'white' : '#fecaca',
+                                    }}
+                                    onPress={() => handleRemovePatient(item)}
+                                >
+                                    <Ionicons name="trash-outline" size={14} color={isSelected ? 'white' : '#dc2626'} />
+                                    <Text style={{ color: isSelected ? 'white' : '#dc2626', fontWeight: 'bold', fontSize: 11 }}>
+                                        Remove
                                     </Text>
-                                    <Text style={[styles.patientPillSub, isSelected && styles.lightText]}>
-                                        Caregiver: {item.caregiver ? item.caregiver.full_name : 'Not assigned'}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
+                                </TouchableOpacity>
+                            </View>
                         );
                     }}
                     ListEmptyComponent={<Text style={styles.emptyText}>No patients linked to your account yet.</Text>}
@@ -443,13 +483,22 @@ export default function DoctorDashboard() {
                             <Text style={styles.sectionTitle}>🧠 Behavioral & Cognitive AI Evaluation</Text>
                             <Text style={styles.patientSubLabel}>Selected Patient: {selectedPatient.full_name} ({selectedPatient.email})</Text>
                         </View>
-                        <TouchableOpacity
-                            style={styles.refreshAiBtn}
-                            onPress={() => runPatientAiAnalysis(selectedPatient.id)}
-                        >
-                            <Ionicons name="refresh" size={22} color="white" />
-                            <Text style={styles.refreshAiText}> Re-run AI</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <TouchableOpacity
+                                style={styles.refreshAiBtn}
+                                onPress={() => runPatientAiAnalysis(selectedPatient.id)}
+                            >
+                                <Ionicons name="refresh" size={18} color="white" />
+                                <Text style={styles.refreshAiText}> Re-run AI</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.refreshAiBtn, { backgroundColor: '#dc2626' }]}
+                                onPress={(e) => handleRemovePatient(selectedPatient, e)}
+                            >
+                                <Ionicons name="trash-outline" size={18} color="white" />
+                                <Text style={styles.refreshAiText}> Remove</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {loadingAi ? (

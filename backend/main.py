@@ -31,9 +31,42 @@ app.include_router(advanced_routes.router, prefix=settings.API_V1_STR, tags=["Ad
 app.include_router(analytics_routes.router, prefix=settings.API_V1_STR, tags=["Analytics Dashboards"])
 app.include_router(face_routes.router,   prefix=settings.API_V1_STR, tags=["Face Recognition"])
 
-@app.get("/")
-def root():
-    return {
-        "message": "Welcome to the AIML-Based Smart Cognitive Assistance API",
-        "docs": "/docs"
-    }
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
+
+# Unified Single-Platform Serving: Check for built frontend in frontend/dist or backend/dist
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if not FRONTEND_DIST.exists():
+    FRONTEND_DIST = Path(__file__).resolve().parent / "dist"
+
+if FRONTEND_DIST.exists() and (FRONTEND_DIST / "index.html").exists():
+    expo_dir = FRONTEND_DIST / "_expo"
+    if expo_dir.exists():
+        app.mount("/_expo", StaticFiles(directory=str(expo_dir)), name="expo-static")
+
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets-static")
+
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_fallback(full_path: str):
+        # Do not intercept API endpoints or Swagger docs
+        if full_path.startswith("api/") or full_path in ("docs", "openapi.json", "redoc"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        file_path = FRONTEND_DIST / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {
+            "message": "Welcome to the AIML-Based Smart Cognitive Assistance API",
+            "docs": "/docs"
+        }
