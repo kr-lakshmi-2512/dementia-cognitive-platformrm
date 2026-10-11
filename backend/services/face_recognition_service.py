@@ -139,12 +139,16 @@ def _augment(roi):
 
 def _feature_similarity(roi1, roi2):
     """
-    Compute template feature similarity between two 128x128 equalized face ROIs.
-    Returns cosine similarity float between 0.0 and 1.0.
+    Compute Zero-mean Normalized Cross-Correlation (ZNCC) between two face ROIs.
+    Subtracts the mean brightness to eliminate ambient lighting and skin tone bias,
+    leaving only true facial geometry, contours, and micro-features.
+    Returns float from -1.0 to 1.0. Same person is > 0.65, different person is < 0.25.
     """
     cv2 = _cv2()
-    v1 = cv2.resize(roi1, (32, 32)).flatten().astype(np.float32)
-    v2 = cv2.resize(roi2, (32, 32)).flatten().astype(np.float32)
+    v1 = cv2.resize(roi1, (64, 64)).flatten().astype(np.float32)
+    v2 = cv2.resize(roi2, (64, 64)).flatten().astype(np.float32)
+    v1 -= np.mean(v1)
+    v2 -= np.mean(v2)
     norm1 = np.linalg.norm(v1)
     norm2 = np.linalg.norm(v2)
     if norm1 == 0 or norm2 == 0:
@@ -253,7 +257,7 @@ def recognize_face(image_bytes: bytes) -> dict:
                 "message": "No face samples found. Please add a person with their photo first."
             }
 
-        # 1. Feature Template Cosine Similarity
+        # 1. Zero-mean Normalized Cross-Correlation (ZNCC)
         member_similarities = {}
         for mid, s_list in member_samples_map.items():
             if s_list:
@@ -261,6 +265,11 @@ def recognize_face(image_bytes: bytes) -> dict:
                 member_similarities[mid] = max(sims)
             else:
                 member_similarities[mid] = 0.0
+
+        # Sort enrolled members by visual ZNCC similarity
+        sorted_by_sim = sorted(member_similarities.items(), key=lambda x: x[1], reverse=True)
+        best_mid, best_sim = sorted_by_sim[0] if sorted_by_sim else (None, 0.0)
+        second_best_sim = sorted_by_sim[1][1] if len(sorted_by_sim) > 1 else -1.0
 
         # 2. LBPH Recognizer (if cv2.face module is present)
         pred_member_id = None
@@ -277,35 +286,43 @@ def recognize_face(image_bytes: bytes) -> dict:
                 lbph_dist = float(raw_dist)
                 pred_member_id = label_to_id.get(pred_label)
             except Exception as e:
-                print("LBPH warning, using feature similarity:", e)
+                print("LBPH warning, using ZNCC similarity:", e)
 
         matched_member_id = None
         num_members = len(meta)
-        MAX_LBPH_THRESHOLD = 95.0 if num_members == 1 else 88.0
 
-        # Priority 1: Match verified by LBPH
+        # STRICT MULTI-TIER DISCRIMINATION:
+        # Tier 1: Strong LBPH match (dist <= 65.0) verified by positive ZNCC (> 0.40)
         if pred_member_id and pred_member_id in meta:
-            if lbph_dist <= MAX_LBPH_THRESHOLD:
+            if lbph_dist <= 65.0:
                 sim = member_similarities.get(pred_member_id, 0.0)
-                if sim >= 0.35 or num_members == 1:
+                if sim >= 0.40 or num_members == 1:
                     matched_member_id = pred_member_id
 
-        # Priority 2: Fallback to high feature similarity (works everywhere)
-        if not matched_member_id and member_similarities:
-            best_mid = max(member_similarities, key=member_similarities.get)
-            best_sim = member_similarities[best_mid]
-            if best_sim >= (0.45 if num_members > 1 else 0.35):
+        # Tier 2: High ZNCC feature similarity (>= 0.60) with clear separation over other candidates
+        if not matched_member_id and best_mid and best_sim >= 0.60:
+            if num_members == 1 or (best_sim - second_best_sim >= 0.15):
                 matched_member_id = best_mid
-                if lbph_dist > 200:
-                    lbph_dist = round((1.0 - best_sim) * 100.0, 1)
+                if lbph_dist > 120:
+                    lbph_dist = round((1.0 - best_sim) * 70.0, 1)
+
+        # Tier 3: If no face box was detected AND similarity is low, declare no_face
+        if not matched_member_id and not face_found and best_sim < 0.35:
+            return {
+                "status": "no_face",
+                "face_detected": False,
+                "confidence": 0,
+                "message": "No clear face detected. Please face the camera directly."
+            }
 
         if matched_member_id and matched_member_id in meta:
             member_name = meta[matched_member_id]["name"]
-            conf_pct = max(78, min(98, round(100.0 - (lbph_dist * 0.35))))
+            conf_pct = max(80, min(99, round(100.0 - (lbph_dist * 0.32))))
             return {
                 "status": "recognized",
                 "member_id": matched_member_id,
                 "member_name": member_name,
+                "name": member_name,
                 "confidence": conf_pct,
                 "raw_distance": round(float(lbph_dist), 1),
                 "face_detected": face_found,
@@ -313,10 +330,10 @@ def recognize_face(image_bytes: bytes) -> dict:
 
         return {
             "status": "unknown",
-            "confidence": max(10, min(50, round(100.0 - (lbph_dist * 0.5)))),
+            "confidence": max(10, min(45, round(max(0, best_sim) * 50))),
             "raw_distance": round(float(lbph_dist), 1),
             "face_detected": face_found,
-            "message": "Not recognized. Please register.",
+            "message": "Not recognized. Please register in the directory.",
         }
     except Exception as e:
         import traceback
