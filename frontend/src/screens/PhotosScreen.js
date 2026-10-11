@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TouchableOpacity,
-    TextInput, Modal, Platform, ActivityIndicator, Dimensions
+    TextInput, Modal, Platform, ActivityIndicator, Dimensions, Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,12 +12,13 @@ const speak = (text) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
         const u = new window.SpeechSynthesisUtterance(text);
-        u.lang = 'en-IN'; u.rate = 0.88;
+        u.lang = 'en-IN';
+        u.rate = 0.88;
         window.speechSynthesis.speak(u);
     }
 };
 
-const MEMBERS_KEY = 'fmd_members_v6';
+const MEMBERS_KEY = 'fmd_members_v7';
 const rd = (k) => {
     try {
         if (typeof window !== 'undefined' && window.localStorage) {
@@ -58,16 +59,17 @@ const captureDataURL = (videoEl) => {
 const ICON_COLORS = ['#7c3aed','#16a34a','#dc2626','#d97706','#0284c7','#db2777','#065f46','#1d4ed8'];
 
 export default function PhotosScreen({ navigation }) {
-    const [members,    setMembers]    = useState([]);
-    const [enrolled,   setEnrolled]   = useState({});
+    const [members,     setMembers]     = useState([]);
+    const [enrolled,    setEnrolled]    = useState({});
+    const [isSyncing,   setIsSyncing]   = useState(false);
 
     /* ── Scan modal ── */
     const [scanModal,   setScanModal]   = useState(false);
     const [scanning,    setScanning]    = useState(false);
     const [scanStatus,  setScanStatus]  = useState('');
-    const [scanResult,  setScanResult]  = useState(null);   // null | result obj
+    const [scanResult,  setScanResult]  = useState(null);
 
-    /* ── Add-Person modal (with built-in camera) ── */
+    /* ── Add-Person modal (with camera & file upload) ── */
     const [addModal,     setAddModal]    = useState(false);
     const [addStep,      setAddStep]     = useState('form'); // 'form' | 'camera' | 'preview'
     const [fname,        setFname]       = useState('');
@@ -77,34 +79,76 @@ export default function PhotosScreen({ navigation }) {
     const [capturedURL,  setCapturedURL]  = useState(null);
     const [saving,       setSaving]      = useState(false);
 
-    const scanVideoRef = useRef(null);
-    const addVideoRef  = useRef(null);
+    const scanVideoRef  = useRef(null);
+    const addVideoRef   = useRef(null);
+    const fileInputRef  = useRef(null);
 
-    useEffect(() => {
+    /* ── Master Member Sync (Server Authoritative) ── */
+    const loadMembers = async () => {
+        // Fast instant render from local cache
         const saved = rd(MEMBERS_KEY);
-        if (Array.isArray(saved)) setMembers(saved);
-        refreshEnrolled();
-    }, []);
+        if (Array.isArray(saved) && saved.length > 0 && members.length === 0) {
+            setMembers(saved);
+            const map = {};
+            saved.forEach(e => { map[e.id || e.member_id] = e; });
+            setEnrolled(map);
+        }
 
-    const refreshEnrolled = async () => {
         try {
-            const r = await fetch(`${API}/face/enrolled`);
+            setIsSyncing(true);
+            const r = await fetch(`${API}/face/members`);
             if (r.ok) {
                 const data = await r.json();
-                const map = {};
-                (data.enrolled || []).forEach(e => { map[e.member_id] = e; });
-                setEnrolled(map);
+                const list = data.members || data.enrolled || [];
+                if (Array.isArray(list)) {
+                    setMembers(list);
+                    wr(MEMBERS_KEY, list);
+                    const map = {};
+                    list.forEach(e => { map[e.id || e.member_id] = e; });
+                    setEnrolled(map);
+                }
+            } else {
+                // Fallback to /enrolled
+                const r2 = await fetch(`${API}/face/enrolled`);
+                if (r2.ok) {
+                    const data2 = await r2.json();
+                    const list2 = data2.enrolled || data2.members || [];
+                    if (Array.isArray(list2) && list2.length > 0) {
+                        setMembers(list2);
+                        wr(MEMBERS_KEY, list2);
+                        const map = {};
+                        list2.forEach(e => { map[e.id || e.member_id] = e; });
+                        setEnrolled(map);
+                    }
+                }
             }
-        } catch (_) {}
+        } catch (_) {
+            // Keep cached members on network glitch
+        } finally {
+            setIsSyncing(false);
+        }
     };
+
+    useEffect(() => {
+        loadMembers();
+        // Periodic background polling ensures cross-phone real-time sync
+        const timer = setInterval(loadMembers, 8000);
+        return () => clearInterval(timer);
+    }, []);
 
     /* ── Camera helpers ── */
     const startCam = (ref) => {
         if (Platform.OS !== 'web') return;
         navigator.mediaDevices?.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } })
             .then(s => { if (ref.current) ref.current.srcObject = s; })
-            .catch(e => window.alert('Camera error: ' + e.message));
+            .catch(e => {
+                console.warn('Camera error:', e.message);
+                if (Platform.OS === 'web') {
+                    window.alert('Camera notice: ' + e.message + '\nYou can also choose "Upload Photo from Device".');
+                }
+            });
     };
+
     const stopCam = (ref) => {
         if (ref.current?.srcObject) {
             ref.current.srcObject.getTracks().forEach(t => t.stop());
@@ -113,72 +157,103 @@ export default function PhotosScreen({ navigation }) {
     };
 
     /* ══════════════════════════════
-       SCAN FLOW
+       SCAN & RECOGNIZE FLOW
     ══════════════════════════════ */
     const openScan = () => {
-        setScanResult(null); setScanStatus('');
+        setScanResult(null);
+        setScanStatus('');
         setScanModal(true);
-        setTimeout(() => startCam(scanVideoRef), 500);
+        setTimeout(() => startCam(scanVideoRef), 450);
     };
-    const closeScan = () => { stopCam(scanVideoRef); setScanModal(false); setScanning(false); setScanStatus(''); };
+
+    const closeScan = () => {
+        stopCam(scanVideoRef);
+        setScanModal(false);
+        setScanning(false);
+        setScanStatus('');
+    };
 
     const handleScan = async () => {
         if (!scanVideoRef.current) return;
-        setScanning(true); setScanStatus('Capturing…');
+        setScanning(true);
+        setScanStatus('Capturing frame…');
         try {
             const blob = await captureBlob(scanVideoRef.current);
             stopCam(scanVideoRef);
-            setScanStatus('Analyzing face…');
+            setScanStatus('Analyzing facial contours…');
             const form = new FormData();
             form.append('file', blob, 'frame.jpg');
-            const res  = await fetch(`${API}/face/recognize`, { method: 'POST', body: form });
+
+            const res = await fetch(`${API}/face/recognize`, { method: 'POST', body: form });
             let data;
             try {
                 data = await res.json();
             } catch (_) {
                 throw new Error(`Server returned status ${res.status}`);
             }
-            setScanning(false); setScanStatus('');
+            setScanning(false);
+            setScanStatus('');
 
             if (data.status === 'recognized') {
-                const member = members.find(m => m.id === data.member_id);
-                setScanResult({ type: 'known', name: data.member_name, member, confidence: data.confidence });
-                speak(`Recognized. This is ${data.member_name}.` + (member?.relation ? ` ${member.relation}.` : ''));
+                const member = members.find(m => (m.id === data.member_id || m.member_id === data.member_id));
+                const dispName = data.member_name || data.name || member?.name || 'Family Member';
+                const dispRel  = data.relation || member?.relation || 'Family Member';
+                const dispDesc = data.desc || member?.desc || `${dispName} is a registered family member.`;
+                const dispColor= data.color || member?.color || '#16a34a';
+                const dispPhoto= data.photo_url || member?.photo_url || `/face/${data.member_id}/photo`;
+
+                setScanResult({
+                    type: 'known',
+                    name: dispName,
+                    relation: dispRel,
+                    desc: dispDesc,
+                    color: dispColor,
+                    photo_url: dispPhoto,
+                    confidence: data.confidence,
+                    member
+                });
+                speak(`Recognized. This is ${dispName}, your ${dispRel}.`);
             } else if (data.status === 'no_face') {
                 setScanResult({ type: 'no_face' });
-                speak('No face detected. Please face the camera directly.');
+                speak('No face detected. Please face the camera directly with good lighting.');
             } else if (data.status === 'error') {
                 setScanResult({ type: 'unknown' });
                 speak('Could not identify. Please try again.');
             } else {
                 setScanResult({ type: 'unknown' });
-                speak('Not recognized. Please register.');
+                speak('Not recognized. Please register in the directory.');
             }
         } catch (e) {
-            setScanning(false); setScanStatus('');
-            window.alert('Face Recognition: ' + e.message);
+            setScanning(false);
+            setScanStatus('');
+            if (Platform.OS === 'web') {
+                window.alert('Face Recognition: ' + e.message);
+            }
             closeScan();
         }
     };
 
     /* ══════════════════════════════
-       ADD PERSON FLOW (3 steps)
-       Step 1: fill form
-       Step 2: take photo
-       Step 3: preview → save
+       ADD PERSON FLOW (Camera or File)
     ══════════════════════════════ */
-    const openAdd = (fromUnknown = false) => {
-        setFname(''); setFrel(''); setFdesc('');
-        setCapturedBlob(null); setCapturedURL(null);
+    const openAdd = () => {
+        setFname('');
+        setFrel('');
+        setFdesc('');
+        setCapturedBlob(null);
+        setCapturedURL(null);
         setAddStep('form');
         setScanModal(false);
         setAddModal(true);
     };
 
     const goToCamera = () => {
-        if (!fname.trim()) { window.alert('Please enter the person\'s name first.'); return; }
+        if (!fname.trim()) {
+            if (Platform.OS === 'web') window.alert('Please enter the person\'s name first.');
+            return;
+        }
         setAddStep('camera');
-        setTimeout(() => startCam(addVideoRef), 500);
+        setTimeout(() => startCam(addVideoRef), 450);
     };
 
     const takePhoto = async () => {
@@ -192,31 +267,48 @@ export default function PhotosScreen({ navigation }) {
     };
 
     const retakePhoto = () => {
-        setCapturedBlob(null); setCapturedURL(null);
+        setCapturedBlob(null);
+        setCapturedURL(null);
         setAddStep('camera');
         setTimeout(() => startCam(addVideoRef), 400);
     };
 
+    const handlePickFile = (e) => {
+        const file = e.target?.files?.[0];
+        if (!file) return;
+        setCapturedBlob(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            setCapturedURL(ev.target.result);
+            stopCam(addVideoRef);
+            setAddStep('preview');
+        };
+        reader.readAsDataURL(file);
+    };
+
     const savePerson = async () => {
-        if (!capturedBlob) { window.alert('Please take a photo first.'); return; }
+        if (!capturedBlob) {
+            if (Platform.OS === 'web') window.alert('Please capture or upload a photo first.');
+            return;
+        }
         setSaving(true);
         const id = `m_${Date.now()}`;
         const colorIdx = members.length % ICON_COLORS.length;
-        const member = {
-            id,
-            name:     fname.trim(),
-            relation: frel.trim() || 'Family Member',
-            desc:     fdesc.trim() || `${fname.trim()} is a registered family member.`,
-            color:    ICON_COLORS[colorIdx],
-            icon:     'person',
-        };
+        const relStr = frel.trim() || 'Family Member';
+        const descStr= fdesc.trim() || `${fname.trim()} is a registered family member.`;
+        const colStr = ICON_COLORS[colorIdx];
 
-        /* Register face on backend */
+        /* Register face on central backend */
         try {
             const form = new FormData();
             form.append('file', capturedBlob, 'face.jpg');
             form.append('member_id', id);
             form.append('member_name', fname.trim());
+            form.append('relation', relStr);
+            form.append('desc', descStr);
+            form.append('color', colStr);
+            form.append('icon', 'person');
+
             const res = await fetch(`${API}/face/register`, { method: 'POST', body: form });
             let err = null;
             try {
@@ -225,20 +317,18 @@ export default function PhotosScreen({ navigation }) {
             } catch (_) {
                 if (!res.ok) err = `Server returned status ${res.status}`;
             }
-            if (err) {
+            if (err && Platform.OS === 'web') {
                 window.alert('Face Register Notice: ' + err);
             }
         } catch (e) {
-            window.alert('Could not save face to backend: ' + e.message);
+            if (Platform.OS === 'web') window.alert('Could not save face to backend: ' + e.message);
         }
 
-        /* Save member locally */
-        const upd = [...members, member];
-        setMembers(upd); wr(MEMBERS_KEY, upd);
-        await refreshEnrolled();
+        /* Reload authoritative synced list from cloud server */
+        await loadMembers();
         setSaving(false);
         setAddModal(false);
-        speak(`${fname.trim()} has been added and their face registered. You can now scan them.`);
+        speak(`${fname.trim()} has been saved to your family directory and their face registered.`);
     };
 
     const closeAdd = () => {
@@ -248,19 +338,19 @@ export default function PhotosScreen({ navigation }) {
 
     /* ── Delete ── */
     const handleDeleteMember = async (id, name) => {
-        if (!window.confirm(`Remove ${name} from the directory?`)) return;
-        try { await fetch(`${API}/face/${id}`, { method: 'DELETE' }); } catch (_) {}
-        const upd = members.filter(m => m.id !== id);
-        setMembers(upd); wr(MEMBERS_KEY, upd);
-        await refreshEnrolled();
+        if (Platform.OS === 'web' && !window.confirm(`Remove ${name} from the directory on all devices?`)) return;
+        try {
+            await fetch(`${API}/face/${id}`, { method: 'DELETE' });
+        } catch (_) {}
+        await loadMembers();
     };
 
     const handleClearAll = async () => {
-        if (!window.confirm('Delete ALL members and face data?')) return;
-        for (const m of members) {
-            try { await fetch(`${API}/face/${m.id}`, { method: 'DELETE' }); } catch (_) {}
-        }
-        setMembers([]); wr(MEMBERS_KEY, []); setEnrolled({});
+        if (Platform.OS === 'web' && !window.confirm('Delete ALL members and face data from all devices?')) return;
+        try {
+            await fetch(`${API}/face/all`, { method: 'DELETE' });
+        } catch (_) {}
+        await loadMembers();
     };
 
     /* ══════════════════════════════════════════
@@ -269,6 +359,17 @@ export default function PhotosScreen({ navigation }) {
     return (
         <View style={[styles.root, { height: SCREEN_H }]}>
 
+            {/* Hidden File Input for mobile/web upload */}
+            {Platform.OS === 'web' && (
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handlePickFile}
+                />
+            )}
+
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hBtn}>
@@ -276,13 +377,19 @@ export default function PhotosScreen({ navigation }) {
                 </TouchableOpacity>
                 <View style={{ flex: 1, alignItems: 'center' }}>
                     <Text style={styles.hTitle}>🧠 Family Memory Directory</Text>
-                    <Text style={styles.hSub}>{members.length} people · {Object.keys(enrolled).length} faces registered</Text>
+                    <Text style={styles.hSub}>
+                        {members.length} {members.length === 1 ? 'person' : 'people'} · {Object.keys(enrolled).length} faces registered
+                        {isSyncing ? ' · 🔄 Syncing…' : ' · ☁️ Synced'}
+                    </Text>
                 </View>
-                <TouchableOpacity onPress={handleClearAll} style={[styles.hBtn, { backgroundColor: '#fee2e2', marginRight: 6 }]}>
-                    <Ionicons name="trash" size={20} color="#dc2626" />
+                <TouchableOpacity onPress={loadMembers} style={[styles.hBtn, { backgroundColor: '#ede9fe', marginRight: 6 }]}>
+                    <Ionicons name="sync" size={18} color="#7c3aed" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => openAdd()} style={styles.hBtn}>
-                    <Ionicons name="person-add" size={22} color="#1f1545" />
+                <TouchableOpacity onPress={handleClearAll} style={[styles.hBtn, { backgroundColor: '#fee2e2', marginRight: 6 }]}>
+                    <Ionicons name="trash" size={18} color="#dc2626" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => openAdd()} style={[styles.hBtn, { backgroundColor: '#7c3aed' }]}>
+                    <Ionicons name="person-add" size={20} color="white" />
                 </TouchableOpacity>
             </View>
 
@@ -295,19 +402,22 @@ export default function PhotosScreen({ navigation }) {
                     <Text style={styles.heroBtnTxt}>  📷 OPEN CAMERA & SCAN FACE</Text>
                 </TouchableOpacity>
 
-                {/* How it works */}
-                <View style={styles.stepsCard}>
-                    <Text style={styles.stepsTitle}>📋 How it works</Text>
-                    <Text style={styles.stepRow}>1️⃣  Tap ➕ to add a person → fill name → take their photo → Save</Text>
-                    <Text style={styles.stepRow}>2️⃣  Tap <Text style={{ fontWeight: 'bold' }}>SCAN FACE</Text> above → point at them → Identify instantly ✅</Text>
+                {/* Sync & Multi-Phone Notice */}
+                <View style={styles.syncNoticeCard}>
+                    <Ionicons name="cloud-done" size={20} color="#059669" />
+                    <Text style={styles.syncNoticeTxt}>
+                        Registered photos sync automatically across all phones logged into this account.
+                    </Text>
                 </View>
 
                 {/* Empty state */}
                 {members.length === 0 && (
                     <View style={styles.emptyCard}>
-                        <Ionicons name="people-outline" size={52} color="#a78bfa" />
+                        <Ionicons name="people-outline" size={54} color="#a78bfa" />
                         <Text style={styles.emptyTitle}>No People Registered Yet</Text>
-                        <Text style={styles.emptySub}>Tap ➕ above to add someone with their photo.</Text>
+                        <Text style={styles.emptySub}>
+                            Tap ➕ Add Person to enroll family members, caregivers, or doctors with their photos.
+                        </Text>
                         <TouchableOpacity style={styles.emptyBtn} onPress={() => openAdd()}>
                             <Ionicons name="person-add" size={18} color="white" />
                             <Text style={styles.emptyBtnTxt}>  Add First Person</Text>
@@ -316,53 +426,91 @@ export default function PhotosScreen({ navigation }) {
                 )}
 
                 {members.length > 0 && (
-                    <Text style={styles.section}>👥 Registered People ({members.length})</Text>
+                    <Text style={styles.section}>👥 Registered Family & Caregivers ({members.length})</Text>
                 )}
 
-                {members.map(item => (
-                    <View key={item.id} style={styles.card}>
-                        <View style={styles.cardTop}>
-                            <View style={[styles.avatar, { backgroundColor: item.color }]}>
-                                <Ionicons name="person" size={26} color="white" />
-                            </View>
-                            <View style={{ flex: 1, marginLeft: 12 }}>
-                                <Text style={styles.cardName}>{item.name}</Text>
-                                <Text style={[styles.cardRel, { color: item.color }]}>{item.relation}</Text>
-                                <View style={styles.faceTag}>
-                                    <Ionicons
-                                        name={enrolled[item.id] ? 'checkmark-circle' : 'alert-circle'}
-                                        size={13}
-                                        color={enrolled[item.id] ? '#16a34a' : '#f59e0b'}
-                                    />
-                                    <Text style={{ fontSize: 11, color: enrolled[item.id] ? '#16a34a' : '#f59e0b', marginLeft: 4 }}>
-                                        {enrolled[item.id] ? 'Face registered ✓' : 'No face — tap Update Photo'}
-                                    </Text>
+                {members.map(item => {
+                    const photoSrc = item.photo_url
+                        ? (item.photo_url.startsWith('http') ? item.photo_url : `${API}${item.photo_url}`)
+                        : `${API}/face/${item.id || item.member_id}/photo`;
+
+                    return (
+                        <View key={item.id || item.member_id} style={styles.card}>
+                            <View style={styles.cardTop}>
+                                {/* Photo Avatar with image rendering */}
+                                <View style={[styles.avatarWrap, { borderColor: item.color || '#7c3aed' }]}>
+                                    {Platform.OS === 'web' ? (
+                                        <img
+                                            src={photoSrc}
+                                            alt={item.name}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            onError={(e) => {
+                                                e.target.style.display = 'none';
+                                                e.target.parentElement.classList.add('fallback-icon');
+                                            }}
+                                        />
+                                    ) : (
+                                        <Image
+                                            source={{ uri: photoSrc }}
+                                            style={styles.avatarPhoto}
+                                        />
+                                    )}
                                 </View>
+
+                                <View style={{ flex: 1, marginLeft: 14 }}>
+                                    <Text style={styles.cardName}>{item.name}</Text>
+                                    <Text style={[styles.cardRel, { color: item.color || '#7c3aed' }]}>{item.relation}</Text>
+                                    <View style={styles.faceTag}>
+                                        <Ionicons
+                                            name="checkmark-circle"
+                                            size={13}
+                                            color="#16a34a"
+                                        />
+                                        <Text style={{ fontSize: 11, color: '#16a34a', fontWeight: '600', marginLeft: 4 }}>
+                                            Face enrolled ✓ (Synced on all phones)
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={styles.delBtn}
+                                    onPress={() => handleDeleteMember(item.id || item.member_id, item.name)}
+                                >
+                                    <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                                </TouchableOpacity>
                             </View>
-                            <TouchableOpacity style={styles.delBtn} onPress={() => handleDeleteMember(item.id, item.name)}>
-                                <Ionicons name="trash-outline" size={18} color="#dc2626" />
-                            </TouchableOpacity>
+
+                            <Text style={styles.cardDesc}>{item.desc}</Text>
+
+                            <View style={styles.cardBtns}>
+                                <TouchableOpacity
+                                    style={[styles.btn, { backgroundColor: item.color || '#7c3aed' }]}
+                                    onPress={() => speak(`This is ${item.name}. ${item.relation}. ${item.desc}`)}
+                                >
+                                    <Ionicons name="volume-high" size={15} color="white" />
+                                    <Text style={styles.btnTxt}>  Hear Info</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.btn, { backgroundColor: '#475569' }]}
+                                    onPress={() => {
+                                        setFname(item.name);
+                                        setFrel(item.relation);
+                                        setFdesc(item.desc);
+                                        setCapturedBlob(null);
+                                        setCapturedURL(null);
+                                        setAddStep('camera');
+                                        setAddModal(true);
+                                        setTimeout(() => startCam(addVideoRef), 450);
+                                    }}
+                                >
+                                    <Ionicons name="camera" size={15} color="white" />
+                                    <Text style={styles.btnTxt}>  Update Photo</Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                        <Text style={styles.cardDesc}>{item.desc}</Text>
-                        <View style={styles.cardBtns}>
-                            <TouchableOpacity style={[styles.btn, { backgroundColor: item.color }]}
-                                onPress={() => speak(`This is ${item.name}. ${item.relation}. ${item.desc}`)}>
-                                <Ionicons name="volume-high" size={15} color="white" />
-                                <Text style={styles.btnTxt}>  Hear Info</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.btn, { backgroundColor: '#6b7280' }]}
-                                onPress={() => {
-                                    setFname(item.name); setFrel(item.relation); setFdesc(item.desc);
-                                    setCapturedBlob(null); setCapturedURL(null);
-                                    setAddStep('camera'); setAddModal(true);
-                                    setTimeout(() => startCam(addVideoRef), 500);
-                                }}>
-                                <Ionicons name="camera" size={15} color="white" />
-                                <Text style={styles.btnTxt}>  Update Photo</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                ))}
+                    );
+                })}
 
                 <View style={{ height: 60 }} />
             </ScrollView>
@@ -375,8 +523,10 @@ export default function PhotosScreen({ navigation }) {
                         {!scanResult ? (
                             /* Camera view */
                             <>
-                                <Text style={styles.camTitle}>🔍 Scan Face</Text>
-                                <Text style={styles.camSub}>Point camera at the person and tap IDENTIFY</Text>
+                                <Text style={styles.camTitle}>🔍 Scan & Identify Face</Text>
+                                <Text style={styles.camSub}>
+                                    Point camera at the person with good lighting and tap IDENTIFY
+                                </Text>
 
                                 <View style={styles.finder}>
                                     {Platform.OS === 'web'
@@ -414,26 +564,47 @@ export default function PhotosScreen({ navigation }) {
                                     <>
                                         <Text style={styles.resultEmoji}>✅</Text>
                                         <View style={[styles.resultBadge, { backgroundColor: '#d1fae5' }]}>
-                                            <Text style={{ color: '#065f46', fontWeight: 'bold', fontSize: 12 }}>
+                                            <Text style={{ color: '#065f46', fontWeight: 'bold', fontSize: 13 }}>
                                                 RECOGNIZED  ({scanResult.confidence}% match)
                                             </Text>
                                         </View>
-                                        <View style={[styles.bigIcon, { backgroundColor: scanResult.member?.color || '#16a34a' }]}>
-                                            <Ionicons name="person" size={50} color="white" />
+
+                                        {/* Registered Photo Display in Modal */}
+                                        <View style={[styles.bigPhotoWrap, { borderColor: scanResult.color || '#16a34a' }]}>
+                                            {Platform.OS === 'web' ? (
+                                                <img
+                                                    src={scanResult.photo_url.startsWith('http') ? scanResult.photo_url : `${API}${scanResult.photo_url}`}
+                                                    alt={scanResult.name}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                />
+                                            ) : (
+                                                <Image
+                                                    source={{ uri: scanResult.photo_url.startsWith('http') ? scanResult.photo_url : `${API}${scanResult.photo_url}` }}
+                                                    style={{ width: '100%', height: '100%', borderRadius: 50 }}
+                                                />
+                                            )}
                                         </View>
+
                                         <Text style={styles.rName}>{scanResult.name}</Text>
-                                        {scanResult.member?.relation && (
-                                            <Text style={[styles.rRel, { color: scanResult.member.color }]}>
-                                                {scanResult.member.relation}
-                                            </Text>
-                                        )}
-                                        {scanResult.member?.desc && (
-                                            <Text style={styles.rDesc}>{scanResult.member.desc}</Text>
-                                        )}
-                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
-                                            onPress={() => speak(`This is ${scanResult.name}. ${scanResult.member?.relation || ''}. ${scanResult.member?.desc || ''}`)}>
+                                        <Text style={[styles.rRel, { color: scanResult.color || '#10b981' }]}>
+                                            {scanResult.relation}
+                                        </Text>
+                                        <Text style={styles.rDesc}>{scanResult.desc}</Text>
+
+                                        <TouchableOpacity
+                                            style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
+                                            onPress={() => speak(`This is ${scanResult.name}. ${scanResult.relation}. ${scanResult.desc}`)}
+                                        >
                                             <Ionicons name="volume-high" size={18} color="white" />
                                             <Text style={styles.rBtnTxt}>  🔊 READ ALOUD</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.rBtn, { backgroundColor: '#334155', marginTop: 8 }]}
+                                            onPress={() => { setScanResult(null); setTimeout(() => startCam(scanVideoRef), 400); }}
+                                        >
+                                            <Ionicons name="scan-outline" size={18} color="white" />
+                                            <Text style={styles.rBtnTxt}>  SCAN ANOTHER PERSON</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
@@ -451,13 +622,23 @@ export default function PhotosScreen({ navigation }) {
                                         </View>
                                         <Text style={styles.rName}>Not Recognized</Text>
                                         <Text style={styles.rDesc}>
-                                            This person is not registered in the directory.{'\n\n'}
-                                            👉 Please tap <Text style={{ fontWeight: 'bold' }}>REGISTER</Text> below to add them.
+                                            This person is not yet registered in this account's directory.{'\n\n'}
+                                            Tap below to add them with their photo.
                                         </Text>
-                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#7c3aed' }]}
-                                            onPress={() => openAdd(true)}>
+                                        <TouchableOpacity
+                                            style={[styles.rBtn, { backgroundColor: '#7c3aed' }]}
+                                            onPress={() => openAdd()}
+                                        >
                                             <Ionicons name="person-add" size={18} color="white" />
-                                            <Text style={styles.rBtnTxt}>  PLEASE REGISTER</Text>
+                                            <Text style={styles.rBtnTxt}>  ➕ REGISTER THIS PERSON</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.rBtn, { backgroundColor: '#334155', marginTop: 8 }]}
+                                            onPress={() => { setScanResult(null); setTimeout(() => startCam(scanVideoRef), 400); }}
+                                        >
+                                            <Ionicons name="refresh" size={18} color="white" />
+                                            <Text style={styles.rBtnTxt}>  TRY AGAIN</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
@@ -473,27 +654,25 @@ export default function PhotosScreen({ navigation }) {
                                         <Text style={styles.rName}>No Face Found</Text>
                                         <Text style={styles.rDesc}>
                                             • Face the camera directly{'\n'}
-                                            • Ensure good lighting{'\n'}
-                                            • Move closer
+                                            • Ensure good ambient lighting{'\n'}
+                                            • Hold phone steady
                                         </Text>
-                                        <TouchableOpacity style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
-                                            onPress={() => { setScanResult(null); setTimeout(() => startCam(scanVideoRef), 400); }}>
+                                        <TouchableOpacity
+                                            style={[styles.rBtn, { backgroundColor: '#16a34a' }]}
+                                            onPress={() => { setScanResult(null); setTimeout(() => startCam(scanVideoRef), 400); }}
+                                        >
                                             <Ionicons name="camera" size={18} color="white" />
                                             <Text style={styles.rBtnTxt}>  TRY AGAIN</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
-
-                                <TouchableOpacity style={{ marginTop: 14 }} onPress={closeScan}>
-                                    <Text style={{ color: '#888', fontWeight: 'bold', textAlign: 'center' }}>CLOSE</Text>
-                                </TouchableOpacity>
                             </>
                         )}
                     </View>
                 </View>
             </Modal>
 
-            {/* ════ ADD PERSON MODAL (3-step) ════ */}
+            {/* ════ ADD / REGISTER MODAL ════ */}
             <Modal visible={addModal} transparent animationType="slide">
                 <View style={styles.overlay}>
                     <View style={styles.formBox}>
@@ -501,38 +680,57 @@ export default function PhotosScreen({ navigation }) {
                         {/* ── Step 1: Form ── */}
                         {addStep === 'form' && (
                             <>
-                                <Text style={styles.formTitle}>➕ Add Person</Text>
-                                <Text style={styles.formSub}>Fill in the details, then take their photo.</Text>
+                                <Text style={styles.formTitle}>➕ Add Family Member</Text>
+                                <Text style={styles.formSub}>
+                                    Fill in details, then capture or upload their photo to register.
+                                </Text>
 
-                                <Text style={styles.label}>Full Name *</Text>
-                                <TextInput style={styles.input} placeholder="e.g. Rachana" placeholderTextColor="#aaa"
-                                    value={fname} onChangeText={setFname} />
+                                <Text style={styles.label}>FULL NAME *</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Lakshmi, Rishika, Kavana"
+                                    placeholderTextColor="#94a3b8"
+                                    value={fname}
+                                    onChangeText={setFname}
+                                    autoFocus
+                                />
 
-                                <Text style={styles.label}>Relationship / Role</Text>
-                                <TextInput style={styles.input} placeholder="e.g. Daughter / Son / Caregiver"
-                                    placeholderTextColor="#aaa" value={frel} onChangeText={setFrel} />
+                                <Text style={styles.label}>RELATIONSHIP</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Caregiver, Daughter, Granddaughter"
+                                    placeholderTextColor="#94a3b8"
+                                    value={frel}
+                                    onChangeText={setFrel}
+                                />
 
-                                <Text style={styles.label}>About them (optional)</Text>
-                                <TextInput style={[styles.input, { height: 60, textAlignVertical: 'top' }]}
-                                    placeholder="Short description…" placeholderTextColor="#aaa"
-                                    multiline value={fdesc} onChangeText={setFdesc} />
+                                <Text style={styles.label}>MEMORY / NOTES</Text>
+                                <TextInput
+                                    style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
+                                    placeholder="e.g. Loves drinking morning tea with you"
+                                    placeholderTextColor="#94a3b8"
+                                    value={fdesc}
+                                    onChangeText={setFdesc}
+                                    multiline
+                                />
 
                                 <TouchableOpacity style={styles.nextBtn} onPress={goToCamera}>
                                     <Ionicons name="camera" size={20} color="white" />
-                                    <Text style={styles.nextBtnTxt}>  NEXT: TAKE PHOTO</Text>
+                                    <Text style={styles.nextBtnTxt}>  NEXT: TAKE OR UPLOAD PHOTO</Text>
                                 </TouchableOpacity>
-                                <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={closeAdd}>
+
+                                <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={closeAdd}>
                                     <Text style={{ color: '#888', fontWeight: 'bold' }}>CANCEL</Text>
                                 </TouchableOpacity>
                             </>
                         )}
 
-                        {/* ── Step 2: Camera ── */}
+                        {/* ── Step 2: Camera & File Upload ── */}
                         {addStep === 'camera' && (
                             <>
-                                <Text style={styles.formTitle}>📸 Take Photo</Text>
+                                <Text style={styles.formTitle}>📸 Photo for {fname}</Text>
                                 <Text style={styles.formSub}>
-                                    {fname} — look straight at the camera{'\n'}with good lighting, then tap CAPTURE
+                                    Take a photo with the camera OR upload from your device gallery.
                                 </Text>
 
                                 <View style={styles.finder}>
@@ -545,34 +743,62 @@ export default function PhotosScreen({ navigation }) {
                                 </View>
 
                                 <View style={styles.camBtns}>
-                                    <TouchableOpacity style={styles.camCancel}
-                                        onPress={() => { stopCam(addVideoRef); setAddStep('form'); }}>
+                                    <TouchableOpacity
+                                        style={styles.camCancel}
+                                        onPress={() => { stopCam(addVideoRef); setAddStep('form'); }}
+                                    >
                                         <Text style={{ color: 'white', fontWeight: 'bold' }}>← BACK</Text>
                                     </TouchableOpacity>
+
                                     <TouchableOpacity style={styles.camAction} onPress={takePhoto}>
                                         <Ionicons name="radio-button-on" size={20} color="white" />
                                         <Text style={{ color: 'white', fontWeight: 'bold', marginLeft: 6 }}>CAPTURE</Text>
                                     </TouchableOpacity>
                                 </View>
+
+                                {/* Device Gallery Upload Option */}
+                                {Platform.OS === 'web' && (
+                                    <TouchableOpacity
+                                        style={styles.uploadBtn}
+                                        onPress={() => fileInputRef.current?.click()}
+                                    >
+                                        <Ionicons name="images-outline" size={18} color="#7c3aed" />
+                                        <Text style={styles.uploadBtnTxt}>  📁 Choose Photo from Device / Gallery</Text>
+                                    </TouchableOpacity>
+                                )}
                             </>
                         )}
 
                         {/* ── Step 3: Preview ── */}
                         {addStep === 'preview' && (
                             <>
-                                <Text style={styles.formTitle}>✅ Photo Captured!</Text>
-                                <Text style={styles.formSub}>Adding: <Text style={{ fontWeight: 'bold' }}>{fname}</Text></Text>
+                                <Text style={styles.formTitle}>✅ Photo Ready!</Text>
+                                <Text style={styles.formSub}>
+                                    Ready to enroll <Text style={{ fontWeight: 'bold' }}>{fname}</Text> into this account.
+                                </Text>
 
                                 {capturedURL && Platform.OS === 'web' && (
-                                    <img src={capturedURL} alt="preview"
-                                        style={{ width: 200, height: 200, borderRadius: 100, objectFit: 'cover',
-                                            alignSelf: 'center', marginVertical: 12, border: '3px solid #7c3aed' }} />
+                                    <img
+                                        src={capturedURL}
+                                        alt="preview"
+                                        style={{
+                                            width: 160,
+                                            height: 160,
+                                            borderRadius: 80,
+                                            objectFit: 'cover',
+                                            alignSelf: 'center',
+                                            marginVertical: 12,
+                                            border: '3px solid #7c3aed'
+                                        }}
+                                    />
                                 )}
 
                                 {saving ? (
                                     <View style={{ alignItems: 'center', marginTop: 12 }}>
                                         <ActivityIndicator size="large" color="#7c3aed" />
-                                        <Text style={{ color: '#7c3aed', marginTop: 8 }}>Registering face…</Text>
+                                        <Text style={{ color: '#7c3aed', marginTop: 8, fontWeight: '600' }}>
+                                            Registering face contours on cloud…
+                                        </Text>
                                     </View>
                                 ) : (
                                     <>
@@ -580,14 +806,16 @@ export default function PhotosScreen({ navigation }) {
                                             <Ionicons name="checkmark-circle" size={20} color="white" />
                                             <Text style={styles.nextBtnTxt}>  SAVE & REGISTER</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity style={[styles.nextBtn, { backgroundColor: '#6b7280', marginTop: 8 }]}
-                                            onPress={retakePhoto}>
+                                        <TouchableOpacity
+                                            style={[styles.nextBtn, { backgroundColor: '#6b7280', marginTop: 8 }]}
+                                            onPress={retakePhoto}
+                                        >
                                             <Ionicons name="refresh" size={18} color="white" />
-                                            <Text style={styles.nextBtnTxt}>  RETAKE PHOTO</Text>
+                                            <Text style={styles.nextBtnTxt}>  RETAKE / CHOOSE ANOTHER</Text>
                                         </TouchableOpacity>
                                     </>
                                 )}
-                                <TouchableOpacity style={{ marginTop: 10, alignItems: 'center' }} onPress={closeAdd}>
+                                <TouchableOpacity style={{ marginTop: 12, alignItems: 'center' }} onPress={closeAdd}>
                                     <Text style={{ color: '#888', fontWeight: 'bold' }}>CANCEL</Text>
                                 </TouchableOpacity>
                             </>
@@ -619,17 +847,20 @@ const styles = StyleSheet.create({
 
     heroBtn:    { backgroundColor: C.purple, paddingVertical: 18, borderRadius: 18,
                   flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-                  marginBottom: 14, shadowColor: C.purple, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
+                  marginBottom: 12, shadowColor: C.purple, shadowOpacity: 0.4, shadowRadius: 10, elevation: 6 },
     heroBtnTxt: { color: 'white', fontWeight: 'bold', fontSize: 16 },
 
-    stepsCard:  { backgroundColor: '#f5f3ff', borderRadius: 14, padding: 14, marginBottom: 16,
-                  borderWidth: 1, borderColor: '#ddd6fe' },
-    stepsTitle: { fontSize: 13, fontWeight: 'bold', color: '#5b21b6', marginBottom: 8 },
-    stepRow:    { fontSize: 12, color: '#4c1d95', lineHeight: 22 },
+    syncNoticeCard: {
+        backgroundColor: '#ecfdf5', borderRadius: 14, padding: 12, marginBottom: 14,
+        flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#a7f3d0'
+    },
+    syncNoticeTxt: {
+        flex: 1, color: '#065f46', fontSize: 12, fontWeight: '600', lineHeight: 18
+    },
 
     emptyCard:  { alignItems: 'center', padding: 30 },
     emptyTitle: { fontSize: 16, fontWeight: 'bold', color: '#a78bfa', marginTop: 12 },
-    emptySub:   { fontSize: 12, color: '#6d28d9', marginTop: 6, textAlign: 'center' },
+    emptySub:   { fontSize: 12, color: '#6d28d9', marginTop: 6, textAlign: 'center', lineHeight: 18 },
     emptyBtn:   { backgroundColor: C.purple, paddingVertical: 12, paddingHorizontal: 24,
                   borderRadius: 14, flexDirection: 'row', alignItems: 'center', marginTop: 16 },
     emptyBtnTxt:{ color: 'white', fontWeight: 'bold' },
@@ -638,16 +869,21 @@ const styles = StyleSheet.create({
 
     card:    { backgroundColor: 'white', borderRadius: 18, padding: 16, marginBottom: 14,
                shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
-    cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-    avatar:  { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-    cardName:{ fontSize: 15, fontWeight: 'bold', color: '#1f1545' },
-    cardRel: { fontSize: 12, fontWeight: '600', marginTop: 2 },
+    cardTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+    avatarWrap: {
+        width: 56, height: 56, borderRadius: 28, overflow: 'hidden',
+        backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center',
+        borderWidth: 2
+    },
+    avatarPhoto: { width: '100%', height: '100%', borderRadius: 28 },
+    cardName:{ fontSize: 16, fontWeight: 'bold', color: '#1f1545' },
+    cardRel: { fontSize: 12, fontWeight: '700', marginTop: 2 },
     faceTag: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-    cardDesc:{ fontSize: 12, color: '#4b5563', lineHeight: 17, marginBottom: 10 },
+    cardDesc:{ fontSize: 13, color: '#4b5563', lineHeight: 18, marginBottom: 12 },
     delBtn:  { padding: 8, backgroundColor: '#fee2e2', borderRadius: 10, marginLeft: 6 },
 
     cardBtns:{ flexDirection: 'row', gap: 10 },
-    btn:     { flex: 1, paddingVertical: 10, borderRadius: 12,
+    btn:     { flex: 1, paddingVertical: 11, borderRadius: 12,
                flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
     btnTxt:  { color: 'white', fontWeight: 'bold', fontSize: 12 },
 
@@ -672,8 +908,20 @@ const styles = StyleSheet.create({
     camAction:{ flex: 1.8, padding: 13, borderRadius: 14, backgroundColor: C.green,
                 flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
 
-    resultEmoji: { fontSize: 48, textAlign: 'center', marginBottom: 8 },
-    resultBadge: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 14, marginBottom: 14 },
+    uploadBtn: {
+        marginTop: 12, paddingVertical: 12, paddingHorizontal: 16,
+        borderRadius: 14, backgroundColor: '#ede9fe', borderWidth: 1, borderColor: '#c4b5fd',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%'
+    },
+    uploadBtnTxt: { color: '#6d28d9', fontWeight: 'bold', fontSize: 13 },
+
+    resultEmoji: { fontSize: 44, textAlign: 'center', marginBottom: 6 },
+    resultBadge: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 14, marginBottom: 12 },
+    bigPhotoWrap:{
+        width: 100, height: 100, borderRadius: 50, overflow: 'hidden',
+        borderWidth: 3, marginBottom: 12, backgroundColor: '#ede9fe',
+        alignItems: 'center', justifyContent: 'center'
+    },
     bigIcon:     { width: 86, height: 86, borderRadius: 43, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
     rName:       { fontSize: 20, fontWeight: 'bold', color: 'white', textAlign: 'center' },
     rRel:        { fontSize: 13, fontWeight: 'bold', marginTop: 3, textAlign: 'center' },

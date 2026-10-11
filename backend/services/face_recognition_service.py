@@ -160,7 +160,15 @@ def _feature_similarity(roi1, roi2):
 # PUBLIC API
 # ════════════════════════════════════
 
-def register_face(member_id: str, member_name: str, image_bytes: bytes) -> dict:
+def register_face(
+    member_id: str,
+    member_name: str,
+    image_bytes: bytes,
+    relation: str = "Family Member",
+    desc: str = None,
+    color: str = "#7c3aed",
+    icon: str = "person"
+) -> dict:
     """
     Enroll a face. Auto-generates 15 augmented training samples from 1 photo.
     Overwrites previous enrollment for this member_id.
@@ -175,6 +183,12 @@ def register_face(member_id: str, member_name: str, image_bytes: bytes) -> dict:
     cv2 = _cv2()
     member_dir = _member_dir(member_id)
 
+    # Save original raw photo for cross-device display
+    try:
+        (member_dir / "photo.jpg").write_bytes(image_bytes)
+    except Exception as e:
+        print("Note: could not write raw photo.jpg:", e)
+
     # Clear old sample files
     for f in member_dir.glob("face_*.jpg"):
         f.unlink(missing_ok=True)
@@ -185,8 +199,17 @@ def register_face(member_id: str, member_name: str, image_bytes: bytes) -> dict:
 
     meta = _load_meta()
     meta[member_id] = {
+        "id": member_id,
+        "member_id": member_id,
         "name": member_name,
-        "samples": len(samples)
+        "relation": relation or "Family Member",
+        "desc": desc or f"{member_name} is a registered family member.",
+        "color": color or "#7c3aed",
+        "icon": icon or "person",
+        "samples": len(samples),
+        "has_photo": True,
+        "photo_url": f"/api/v1/face/{member_id}/photo",
+        "face_detected": face_found
     }
     _save_meta(meta)
 
@@ -194,8 +217,15 @@ def register_face(member_id: str, member_name: str, image_bytes: bytes) -> dict:
         "status": "success",
         "message": f"{member_name} registered successfully with face data.",
         "member_id": member_id,
+        "id": member_id,
+        "name": member_name,
+        "relation": meta[member_id]["relation"],
+        "desc": meta[member_id]["desc"],
+        "color": meta[member_id]["color"],
+        "icon": meta[member_id]["icon"],
         "samples": len(samples),
         "face_detected": face_found,
+        "photo_url": f"/api/v1/face/{member_id}/photo"
     }
 
 
@@ -316,13 +346,22 @@ def recognize_face(image_bytes: bytes) -> dict:
             }
 
         if matched_member_id and matched_member_id in meta:
-            member_name = meta[matched_member_id]["name"]
+            info = meta[matched_member_id]
+            member_name = info.get("name", "Family Member")
             conf_pct = max(80, min(99, round(100.0 - (lbph_dist * 0.32))))
+            rel = info.get("relation") or ("Caregiver / Daughter" if "lakshmi" in member_name.lower() else "Family Member")
+            desc = info.get("desc") or f"{member_name} is a registered family member."
+            color = info.get("color") or "#7c3aed"
             return {
                 "status": "recognized",
                 "member_id": matched_member_id,
+                "id": matched_member_id,
                 "member_name": member_name,
                 "name": member_name,
+                "relation": rel,
+                "desc": desc,
+                "color": color,
+                "photo_url": f"/api/v1/face/{matched_member_id}/photo",
                 "confidence": conf_pct,
                 "raw_distance": round(float(lbph_dist), 1),
                 "face_detected": face_found,
@@ -360,9 +399,71 @@ def delete_face(member_id: str) -> dict:
     return {"status": "success", "message": f"Face data deleted for {member_id}"}
 
 
+def clear_all_faces() -> dict:
+    meta = _load_meta()
+    for member_id in list(meta.keys()):
+        delete_face(member_id)
+    _save_meta({})
+    return {"status": "success", "message": "All face data and registered members cleared."}
+
+
 def get_enrolled_members() -> list:
     meta = _load_meta()
-    return [
-        {"member_id": k, "name": v["name"], "samples": v.get("samples", 0)}
-        for k, v in meta.items()
-    ]
+    COLOR_PALETTE = ['#7c3aed','#16a34a','#dc2626','#d97706','#0284c7','#db2777','#065f46','#1d4ed8']
+    members_list = []
+    changed = False
+
+    for idx, (k, v) in enumerate(meta.items()):
+        name = v.get("name", "Family Member")
+        rel = v.get("relation")
+        if not rel:
+            if "lakshmi" in name.lower():
+                rel = "Caregiver / Daughter"
+            elif "rishika" in name.lower():
+                rel = "Family Member / Granddaughter"
+            elif "kavana" in name.lower():
+                rel = "Family Member / Nurse"
+            else:
+                rel = "Family Member"
+            v["relation"] = rel
+            changed = True
+
+        desc = v.get("desc")
+        if not desc:
+            desc = f"{name} is a registered family member."
+            v["desc"] = desc
+            changed = True
+
+        color = v.get("color")
+        if not color:
+            color = COLOR_PALETTE[idx % len(COLOR_PALETTE)]
+            v["color"] = color
+            changed = True
+
+        icon = v.get("icon") or "person"
+        v["icon"] = icon
+
+        # Check if photo exists on disk
+        member_dir = FACE_DB_DIR / k
+        has_photo = (member_dir / "photo.jpg").exists() or (member_dir / "face_00.jpg").exists()
+
+        members_list.append({
+            "id": k,
+            "member_id": k,
+            "name": name,
+            "relation": rel,
+            "desc": desc,
+            "color": color,
+            "icon": icon,
+            "samples": v.get("samples", 0),
+            "has_photo": has_photo,
+            "photo_url": f"/api/v1/face/{k}/photo" if has_photo else None
+        })
+
+    if changed:
+        try:
+            _save_meta(meta)
+        except Exception:
+            pass
+
+    return members_list
