@@ -53,7 +53,7 @@ def _get_face_roi(gray):
     """
     Detect face bounding box using OpenCV Haar cascade.
     Expands box by 15% margin and equalizes histogram.
-    Falls back to generous center crop if cascade misses.
+    Falls back safely to generous center crop if cascade misses or is unavailable.
     Always returns a 128x128 equalized grayscale ROI.
     """
     cv2 = _cv2()
@@ -61,27 +61,31 @@ def _get_face_roi(gray):
 
     # Contrast enhancement for better detection
     gray_eq = cv2.equalizeHist(gray)
-    
-    # Try frontal face cascade first
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    fc = cv2.CascadeClassifier(cascade_path)
-    faces = fc.detectMultiScale(gray_eq, scaleFactor=1.08, minNeighbors=2, minSize=(30, 30))
+    faces = []
 
-    # Fallback to alt2 cascade if missed
-    if len(faces) == 0:
-        cascade_alt = cv2.data.haarcascades + "haarcascade_frontalface_alt2.xml"
-        fc_alt = cv2.CascadeClassifier(cascade_alt)
-        if not fc_alt.empty():
-            faces = fc_alt.detectMultiScale(gray_eq, scaleFactor=1.08, minNeighbors=2, minSize=(30, 30))
+    try:
+        cascade_dir = getattr(cv2.data, "haarcascades", "")
+        if cascade_dir:
+            p_default = Path(cascade_dir) / "haarcascade_frontalface_default.xml"
+            if p_default.exists():
+                fc = cv2.CascadeClassifier(str(p_default))
+                if not fc.empty():
+                    det = fc.detectMultiScale(gray_eq, scaleFactor=1.08, minNeighbors=2, minSize=(30, 30))
+                    if det is not None and len(det) > 0:
+                        faces = list(det)
 
-    # Profile face fallback
-    if len(faces) == 0:
-        cascade_prof = cv2.data.haarcascades + "haarcascade_profileface.xml"
-        fc_prof = cv2.CascadeClassifier(cascade_prof)
-        if not fc_prof.empty():
-            faces = fc_prof.detectMultiScale(gray_eq, scaleFactor=1.08, minNeighbors=1, minSize=(30, 30))
+            if len(faces) == 0:
+                p_alt = Path(cascade_dir) / "haarcascade_frontalface_alt2.xml"
+                if p_alt.exists():
+                    fc_alt = cv2.CascadeClassifier(str(p_alt))
+                    if not fc_alt.empty():
+                        det = fc_alt.detectMultiScale(gray_eq, scaleFactor=1.08, minNeighbors=2, minSize=(30, 30))
+                        if det is not None and len(det) > 0:
+                            faces = list(det)
+    except Exception as e:
+        print("Cascade detection note:", e)
 
-    face_detected = (faces is not None and len(faces) > 0)
+    face_detected = (len(faces) > 0)
 
     if face_detected:
         x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
@@ -193,113 +197,135 @@ def register_face(member_id: str, member_name: str, image_bytes: bytes) -> dict:
 
 def recognize_face(image_bytes: bytes) -> dict:
     """
-    Identify who is in the photo using strict LBPH pattern prediction.
-    NEVER cross-matches or guesses other registered members.
+    Identify who is in the photo using strict LBPH pattern prediction
+    with automatic normalized feature similarity fallback.
     """
-    cv2 = _cv2()
-    meta = _load_meta()
+    try:
+        cv2 = _cv2()
+        meta = _load_meta()
 
-    if not meta:
+        if not meta:
+            return {
+                "status": "unknown",
+                "message": "No faces registered yet. Please add a person with their photo first."
+            }
+
+        _, gray = _decode_gray(image_bytes)
+        if gray is None:
+            return {"status": "error", "message": "Could not decode image."}
+
+        roi, face_found = _get_face_roi(gray)
+
+        # Load all stored samples per member
+        faces_train = []
+        labels_train = []
+        label_to_id = {}
+        id_to_label = {}
+        member_samples_map = {}
+        counter = 0
+
+        for member_id, info in meta.items():
+            member_dir = FACE_DB_DIR / member_id
+            samples = sorted(member_dir.glob("face_*.jpg"))
+            if not samples:
+                continue
+            
+            if member_id not in id_to_label:
+                id_to_label[member_id] = counter
+                label_to_id[counter] = member_id
+                counter += 1
+            
+            lbl = id_to_label[member_id]
+            member_samples_map[member_id] = []
+
+            for s in samples:
+                img = cv2.imread(str(s), cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    img_res = cv2.resize(img, (128, 128))
+                    img_res = cv2.equalizeHist(img_res)
+                    faces_train.append(img_res)
+                    labels_train.append(lbl)
+                    member_samples_map[member_id].append(img_res)
+
+        if not faces_train:
+            return {
+                "status": "unknown",
+                "message": "No face samples found. Please add a person with their photo first."
+            }
+
+        # 1. Feature Template Cosine Similarity
+        member_similarities = {}
+        for mid, s_list in member_samples_map.items():
+            if s_list:
+                sims = [_feature_similarity(roi, s_img) for s_img in s_list]
+                member_similarities[mid] = max(sims)
+            else:
+                member_similarities[mid] = 0.0
+
+        # 2. LBPH Recognizer (if cv2.face module is present)
+        pred_member_id = None
+        lbph_dist = 999.0
+        has_lbph = hasattr(cv2, 'face') and hasattr(cv2.face, 'LBPHFaceRecognizer_create')
+
+        if has_lbph:
+            try:
+                recognizer = cv2.face.LBPHFaceRecognizer_create(
+                    radius=1, neighbors=8, grid_x=8, grid_y=8
+                )
+                recognizer.train(faces_train, np.array(labels_train))
+                pred_label, raw_dist = recognizer.predict(roi)
+                lbph_dist = float(raw_dist)
+                pred_member_id = label_to_id.get(pred_label)
+            except Exception as e:
+                print("LBPH warning, using feature similarity:", e)
+
+        matched_member_id = None
+        num_members = len(meta)
+        MAX_LBPH_THRESHOLD = 95.0 if num_members == 1 else 88.0
+
+        # Priority 1: Match verified by LBPH
+        if pred_member_id and pred_member_id in meta:
+            if lbph_dist <= MAX_LBPH_THRESHOLD:
+                sim = member_similarities.get(pred_member_id, 0.0)
+                if sim >= 0.35 or num_members == 1:
+                    matched_member_id = pred_member_id
+
+        # Priority 2: Fallback to high feature similarity (works everywhere)
+        if not matched_member_id and member_similarities:
+            best_mid = max(member_similarities, key=member_similarities.get)
+            best_sim = member_similarities[best_mid]
+            if best_sim >= (0.45 if num_members > 1 else 0.35):
+                matched_member_id = best_mid
+                if lbph_dist > 200:
+                    lbph_dist = round((1.0 - best_sim) * 100.0, 1)
+
+        if matched_member_id and matched_member_id in meta:
+            member_name = meta[matched_member_id]["name"]
+            conf_pct = max(78, min(98, round(100.0 - (lbph_dist * 0.35))))
+            return {
+                "status": "recognized",
+                "member_id": matched_member_id,
+                "member_name": member_name,
+                "confidence": conf_pct,
+                "raw_distance": round(float(lbph_dist), 1),
+                "face_detected": face_found,
+            }
+
         return {
             "status": "unknown",
-            "message": "No faces registered yet. Please add a person with their photo first."
-        }
-
-    _, gray = _decode_gray(image_bytes)
-    if gray is None:
-        return {"status": "error", "message": "Could not decode image."}
-
-    roi, face_found = _get_face_roi(gray)
-
-    # Load all stored samples per member
-    faces_train = []
-    labels_train = []
-    label_to_id = {}
-    id_to_label = {}
-    member_samples_map = {}
-    counter = 0
-
-    for member_id, info in meta.items():
-        member_dir = FACE_DB_DIR / member_id
-        samples = sorted(member_dir.glob("face_*.jpg"))
-        if not samples:
-            continue
-        
-        if member_id not in id_to_label:
-            id_to_label[member_id] = counter
-            label_to_id[counter] = member_id
-            counter += 1
-        
-        lbl = id_to_label[member_id]
-        member_samples_map[member_id] = []
-
-        for s in samples:
-            img = cv2.imread(str(s), cv2.IMREAD_GRAYSCALE)
-            if img is not None:
-                img_res = cv2.resize(img, (128, 128))
-                img_res = cv2.equalizeHist(img_res)
-                faces_train.append(img_res)
-                labels_train.append(lbl)
-                member_samples_map[member_id].append(img_res)
-
-    if not faces_train:
-        return {
-            "status": "unknown",
-            "message": "No face samples found. Please add a person with their photo first."
-        }
-
-    # Train standard LBPH Recognizer (radius=1, neighbors=8)
-    recognizer = cv2.face.LBPHFaceRecognizer_create(
-        radius=1, neighbors=8, grid_x=8, grid_y=8
-    )
-    recognizer.train(faces_train, np.array(labels_train))
-    pred_label, lbph_dist = recognizer.predict(roi)
-
-    pred_member_id = label_to_id.get(pred_label)
-
-    # Compute template feature similarity for predicted member
-    member_similarities = {}
-    for mid, s_list in member_samples_map.items():
-        if s_list:
-            sims = [_feature_similarity(roi, s_img) for s_img in s_list]
-            member_similarities[mid] = max(sims)
-        else:
-            member_similarities[mid] = 0.0
-
-    matched_member_id = None
-    num_members = len(meta)
-
-    # Strict Discrimination Thresholds:
-    # LBPH distance for the same face is typically 20 - 75.
-    # Different face distance is > 90.
-    MAX_LBPH_THRESHOLD = 95.0 if num_members == 1 else 88.0
-
-    if pred_member_id and pred_member_id in meta:
-        if lbph_dist <= MAX_LBPH_THRESHOLD:
-            sim = member_similarities.get(pred_member_id, 0.0)
-            if sim >= 0.40 or num_members == 1:
-                matched_member_id = pred_member_id
-
-    if matched_member_id and matched_member_id in meta:
-        member_name = meta[matched_member_id]["name"]
-        # Human-readable confidence percentage (78% to 98%)
-        conf_pct = max(78, min(98, round(100.0 - (lbph_dist * 0.35))))
-        return {
-            "status": "recognized",
-            "member_id": matched_member_id,
-            "member_name": member_name,
-            "confidence": conf_pct,
+            "confidence": max(10, min(50, round(100.0 - (lbph_dist * 0.5)))),
             "raw_distance": round(float(lbph_dist), 1),
             "face_detected": face_found,
+            "message": "Not recognized. Please register.",
         }
-
-    return {
-        "status": "unknown",
-        "confidence": max(10, min(50, round(100.0 - (lbph_dist * 0.5)))),
-        "raw_distance": round(float(lbph_dist), 1),
-        "face_detected": face_found,
-        "message": "Not recognized. Please register.",
-    }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "message": f"Face recognition service note: {str(e)}",
+            "face_detected": False
+        }
 
 
 def delete_face(member_id: str) -> dict:

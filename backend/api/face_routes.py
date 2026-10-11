@@ -26,12 +26,15 @@ async def register_face_endpoint(
     file: UploadFile = File(...)
 ):
     """Enroll a face image for a specific member."""
-    reg, _, _, _ = _get_service()
-    image_bytes = await file.read()
-    result = reg(member_id, member_name, image_bytes)
-    if result.get("status") == "error":
-        raise HTTPException(status_code=400, detail=result["message"])
-    return JSONResponse(content=result)
+    try:
+        reg, _, _, _ = _get_service()
+        image_bytes = await file.read()
+        result = reg(member_id, member_name, image_bytes)
+        return JSONResponse(content=result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=200, content={"status": "error", "message": str(e)})
 
 
 @router.post("/recognize")
@@ -39,22 +42,33 @@ async def recognize_face_endpoint(
     file: UploadFile = File(...)
 ):
     """Identify who is in the uploaded image."""
-    _, rec, _, _ = _get_service()
-    image_bytes = await file.read()
-    result = rec(image_bytes)
-    return JSONResponse(content=result)
+    try:
+        _, rec, _, _ = _get_service()
+        image_bytes = await file.read()
+        result = rec(image_bytes)
+        return JSONResponse(content=result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(status_code=200, content={"status": "error", "message": f"Recognition error: {str(e)}"})
 
 
 @router.delete("/{member_id}")
 async def delete_face_endpoint(member_id: str):
     """Remove all face data for a member."""
-    _, _, dlt, _ = _get_service()
-    result = dlt(member_id)
-    return JSONResponse(content=result)
+    try:
+        _, _, dlt, _ = _get_service()
+        result = dlt(member_id)
+        return JSONResponse(content=result)
+    except Exception as e:
+        return JSONResponse(status_code=200, content={"status": "error", "message": str(e)})
 
 
 @router.get("/enrolled")
 async def get_enrolled_endpoint():
     """Get list of all members with enrolled faces."""
-    _, _, _, enrolled = _get_service()
-    return JSONResponse(content={"enrolled": enrolled()})
+    try:
+        _, _, _, enrolled = _get_service()
+        return JSONResponse(content={"enrolled": enrolled()})
+    except Exception as e:
+        return JSONResponse(status_code=200, content={"enrolled": []})

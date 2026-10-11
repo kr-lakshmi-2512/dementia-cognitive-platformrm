@@ -132,7 +132,12 @@ export default function PhotosScreen({ navigation }) {
             const form = new FormData();
             form.append('file', blob, 'frame.jpg');
             const res  = await fetch(`${API}/face/recognize`, { method: 'POST', body: form });
-            const data = await res.json();
+            let data;
+            try {
+                data = await res.json();
+            } catch (_) {
+                throw new Error(`Server returned status ${res.status}`);
+            }
             setScanning(false); setScanStatus('');
 
             if (data.status === 'recognized') {
@@ -142,13 +147,16 @@ export default function PhotosScreen({ navigation }) {
             } else if (data.status === 'no_face') {
                 setScanResult({ type: 'no_face' });
                 speak('No face detected. Please face the camera directly.');
+            } else if (data.status === 'error') {
+                setScanResult({ type: 'unknown' });
+                speak('Could not identify. Please try again.');
             } else {
                 setScanResult({ type: 'unknown' });
                 speak('Not recognized. Please register.');
             }
         } catch (e) {
             setScanning(false); setScanStatus('');
-            window.alert('Error: ' + e.message + '\n\nMake sure the backend server is running.');
+            window.alert('Face Recognition: ' + e.message);
             closeScan();
         }
     };
@@ -210,9 +218,15 @@ export default function PhotosScreen({ navigation }) {
             form.append('member_id', id);
             form.append('member_name', fname.trim());
             const res = await fetch(`${API}/face/register`, { method: 'POST', body: form });
-            if (!res.ok) {
-                const err = await res.json();
-                window.alert('Face register warning: ' + (err.message || err.detail));
+            let err = null;
+            try {
+                const json = await res.json();
+                if (!res.ok || json.status === 'error') err = json.message || json.detail;
+            } catch (_) {
+                if (!res.ok) err = `Server returned status ${res.status}`;
+            }
+            if (err) {
+                window.alert('Face Register Notice: ' + err);
             }
         } catch (e) {
             window.alert('Could not save face to backend: ' + e.message);
