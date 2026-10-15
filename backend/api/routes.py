@@ -90,7 +90,32 @@ def complete_reminder(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    return services.complete_reminder(db, reminder_id=reminder_id)
+    rem = services.complete_reminder(db, reminder_id=reminder_id, is_completed=True)
+    if not rem:
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return rem
+
+@router.put("/uncomplete-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
+def uncomplete_reminder(
+    reminder_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    rem = services.complete_reminder(db, reminder_id=reminder_id, is_completed=False)
+    if not rem:
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return rem
+
+@router.put("/toggle-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
+def toggle_reminder(
+    reminder_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    rem = services.toggle_reminder(db, reminder_id=reminder_id)
+    if not rem:
+        raise HTTPException(status_code=404, detail="Reminder not found.")
+    return rem
 
 @router.put("/miss-reminder/{reminder_id}", response_model=schemas.ReminderResponse)
 def miss_reminder(

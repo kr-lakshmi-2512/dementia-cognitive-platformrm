@@ -5,7 +5,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { fetchReminders, addReminder, updateReminder, deleteReminder, parseUTC, getUserRole } from '../api/client';
+import {
+    fetchReminders, addReminder, updateReminder, deleteReminder,
+    completeReminder, uncompleteReminder, toggleReminder,
+    parseUTC, getUserRole
+} from '../api/client';
 
 const speak = (text) => {
     if (Platform.OS === 'web' && window.speechSynthesis) {
@@ -148,9 +152,27 @@ export default function MedicationScreen({ navigation }) {
         );
     }
 
-    const handleToggleTaken = (item, medName) => {
+    const handleToggleTaken = async (item, medName) => {
         const newStatus = !item.is_completed;
+        // Optimistic UI update so button turns green/orange instantly
         setReminders(prev => prev.map(r => r.id === item.id ? { ...r, is_completed: newStatus } : r));
+
+        try {
+            if (newStatus) {
+                await completeReminder(item.id);
+            } else {
+                await uncompleteReminder(item.id);
+            }
+            // Fetch fresh database state to guarantee synchronization
+            const fresh = await fetchReminders();
+            setReminders(fresh);
+        } catch (e) {
+            console.error('Failed to sync reminder status with backend:', e);
+            // Revert state on error
+            setReminders(prev => prev.map(r => r.id === item.id ? { ...r, is_completed: item.is_completed } : r));
+            showMsg('Notice', 'Could not sync status with server. Please check your connection.');
+            return;
+        }
 
         if (newStatus) {
             const spokenMsg = `Medication ${medName} marked as TAKEN. Caregiver Lakshmi and Dr. Pushpa have been notified. Great job!`;
