@@ -76,67 +76,6 @@ const playEmergencySirenSound = () => {
     speak("ALERT! Emergency SOS sent! Caregiver Lakshmi and Doctor Pushpa have been notified!");
 };
 
-let alarmAudioCtx = null;
-
-const playMedicationAlarmChime = () => {
-    try {
-        if (typeof window === 'undefined') return;
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        if (!alarmAudioCtx || alarmAudioCtx.state === 'closed') {
-            alarmAudioCtx = new AudioCtx();
-        }
-        if (alarmAudioCtx.state === 'suspended') {
-            alarmAudioCtx.resume();
-        }
-        const ctx = alarmAudioCtx;
-        const now = ctx.currentTime;
-
-        // Tone 1: E5 (659.25 Hz)
-        const osc1 = ctx.createOscillator();
-        const gain1 = ctx.createGain();
-        osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(659.25, now);
-        gain1.gain.setValueAtTime(0.55, now);
-        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-        osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.start(now);
-        osc1.stop(now + 0.3);
-
-        // Tone 2: A5 (880 Hz)
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(880, now + 0.2);
-        gain2.gain.setValueAtTime(0.7, now + 0.2);
-        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.start(now + 0.2);
-        osc2.stop(now + 0.6);
-
-        // Tone 3: E6 (1318.5 Hz) crisp bell harmonic
-        const osc3 = ctx.createOscillator();
-        const gain3 = ctx.createGain();
-        osc3.type = 'triangle';
-        osc3.frequency.setValueAtTime(1318.5, now + 0.38);
-        gain3.gain.setValueAtTime(0.5, now + 0.38);
-        gain3.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
-        osc3.connect(gain3);
-        gain3.connect(ctx.destination);
-        osc3.start(now + 0.38);
-        osc3.stop(now + 0.95);
-
-        // Mobile device vibration pulse
-        if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate([300, 150, 300, 150, 300]);
-        }
-    } catch (e) {
-        console.log('Chime sound error:', e);
-    }
-};
-
 export default function PatientDashboard({ navigation }) {
     const [reminders, setReminders]             = useState([]);
     const [currentUser, setCurrentUser]         = useState(null);
@@ -357,8 +296,6 @@ export default function PatientDashboard({ navigation }) {
     const pulseAnim  = useRef(new Animated.Value(1)).current;
     const checkedIds = useRef(new Set());
     const repeatTimerRef = useRef(null);
-    const alarmIntervalRef = useRef(null);
-    const isAlarmRingingRef = useRef(false);
     const isRepeatingRef = useRef(false);
 
     const OBJECT_LOGS = [
@@ -385,27 +322,6 @@ export default function PatientDashboard({ navigation }) {
         }
     }, [voiceState]);
 
-    // Unlock browser Web Audio on first user interaction
-    useEffect(() => {
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            const unlock = () => {
-                try {
-                    if (alarmAudioCtx && alarmAudioCtx.state === 'suspended') {
-                        alarmAudioCtx.resume();
-                    }
-                } catch (_) {}
-                window.removeEventListener('click', unlock);
-                window.removeEventListener('touchstart', unlock);
-            };
-            window.addEventListener('click', unlock);
-            window.addEventListener('touchstart', unlock);
-            return () => {
-                window.removeEventListener('click', unlock);
-                window.removeEventListener('touchstart', unlock);
-            };
-        }
-    }, []);
-
     useEffect(() => {
         loadDashboard();
         autoTrackLocation();
@@ -413,10 +329,8 @@ export default function PatientDashboard({ navigation }) {
         return () => clearInterval(pollInterval);
     }, []);
 
-    // Check for due medications every 3 seconds for instant alarm trigger
     useEffect(() => {
-        checkForDueMedications(reminders);
-        const interval = setInterval(() => checkForDueMedications(), 3000);
+        const interval = setInterval(checkForDueMedications, 10000);
         return () => clearInterval(interval);
     }, [reminders]);
 
@@ -448,9 +362,9 @@ export default function PatientDashboard({ navigation }) {
 
     const checkForDueMedications = (reminderList = reminders) => {
         const list = Array.isArray(reminderList) ? reminderList : reminders;
-        if (!list || list.length === 0) return;
-
         const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
 
         for (const rem of list) {
             if (rem.is_completed) continue;
@@ -460,14 +374,10 @@ export default function PatientDashboard({ navigation }) {
             const schedHours = scheduledDate.getHours();
             const schedMinutes = scheduledDate.getMinutes();
 
-            // Compare against today's target time
-            const targetToday = new Date();
-            targetToday.setHours(schedHours, schedMinutes, 0, 0);
+            // Trigger ONLY when system clock reaches exact scheduled hour and minute
+            const isTimeMatch = (currentHours === schedHours) && (currentMinutes === schedMinutes);
 
-            const diffMinutes = (now.getTime() - targetToday.getTime()) / (1000 * 60);
-
-            // Trigger alarm if clock is at scheduled time (-15s to +45 mins window for today)
-            if (diffMinutes >= -0.25 && diffMinutes <= 45) {
+            if (isTimeMatch) {
                 checkedIds.current.add(rem.id);
                 triggerVoiceReminder(rem);
                 break;
@@ -475,55 +385,45 @@ export default function PatientDashboard({ navigation }) {
         }
     };
 
-    const stopAlarmSound = () => {
-        isAlarmRingingRef.current = false;
+    const stopRepeatingSpeech = () => {
         isRepeatingRef.current = false;
-        if (alarmIntervalRef.current) {
-            clearInterval(alarmIntervalRef.current);
-            alarmIntervalRef.current = null;
-        }
         if (repeatTimerRef.current) {
             clearTimeout(repeatTimerRef.current);
             repeatTimerRef.current = null;
         }
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
+        if (Platform.OS === 'web' && window.speechSynthesis) {
             window.speechSynthesis.cancel();
         }
     };
 
     const triggerVoiceReminder = (reminder) => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         setActiveReminder(reminder);
         setVoiceModal(true);
         setVoiceState('speaking');
-
         const parts = reminder.title.split(' - ');
         const medName = parts.slice(1).join(' - ') || reminder.title;
         const announcement = `Hello! It is time to take your ${medName}. Please take your medicine now. Say "Taken" or press the Taken button when done.`;
         setVoiceTitle(`🔔 Time for: ${medName}`);
         setCompanionText(announcement);
 
-        isAlarmRingingRef.current = true;
         isRepeatingRef.current = true;
 
-        // 1. Immediately ring the digital alarm bell chime
-        playMedicationAlarmChime();
-
-        // 2. Announce voice guidance after chime start
-        setTimeout(() => {
-            if (!isAlarmRingingRef.current) return;
+        const loopSpeech = () => {
+            if (!isRepeatingRef.current) return;
             speak(announcement, () => {
-                if (isAlarmRingingRef.current) {
-                    setVoiceState('listening');
-                }
+                if (!isRepeatingRef.current) return;
+                setVoiceState('listening');
+                repeatTimerRef.current = setTimeout(() => {
+                    if (isRepeatingRef.current) {
+                        setVoiceState('speaking');
+                        loopSpeech();
+                    }
+                }, 2000);
             });
-        }, 500);
+        };
 
-        // 3. Continue repeating alarm chime every 2.8 seconds until confirmed taken
-        alarmIntervalRef.current = setInterval(() => {
-            if (!isAlarmRingingRef.current) return;
-            playMedicationAlarmChime();
-        }, 2800);
+        loopSpeech();
     };
 
     // Dynamic Caregiver & Doctor Info strictly from database user profile
@@ -605,7 +505,7 @@ export default function PatientDashboard({ navigation }) {
 
     // 3 DISTINCT COGNITIVE QUESTIONS & REASSURANCES
     const handleWhereAmI = () => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         const text = `You are safe at home in your residence, ${currentUser?.full_name || 'Patient'}. Your home safe zone is active, and your primary caregiver ${caregiverName} and ${doctorName} are assisting you.`;
         setVoiceTitle("📍 Location Guidance: Home Safe Zone");
         setCompanionText(text);
@@ -615,7 +515,7 @@ export default function PatientDashboard({ navigation }) {
     };
 
     const handleWhatShouldIDo = () => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         const text = `Right now, you should take your scheduled morning medication. Caregiver ${caregiverName} and ${doctorName} are available to help you.`;
         setVoiceTitle("⏰ Next Action: Take Morning Medicine");
         setCompanionText(text);
@@ -625,7 +525,7 @@ export default function PatientDashboard({ navigation }) {
     };
 
     const handleWhoIsHelpingMe = () => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         const text = `Your caregiver ${caregiverName} manages your meals and medicine daily, and ${doctorName} oversees your medical and neurological health.`;
         setVoiceTitle(`👥 Your Care Team: ${caregiverFirstName} & ${doctorFirstName}`);
         setCompanionText(text);
@@ -635,67 +535,32 @@ export default function PatientDashboard({ navigation }) {
     };
 
     const handleVoiceConfirm = async (id, taken) => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         try {
-            // Immediate optimistic UI update so state stays permanently taken
-            setReminders(prev => prev.map(r => r.id === id ? { ...r, is_completed: true } : r));
-            checkedIds.current.add(id);
-
             if (taken) {
+                await completeReminder(id);
                 setVoiceState('success');
                 setVoiceTitle('✅ Great job! Marked as taken.');
-                await completeReminder(id);
-                await loadDashboard();
                 speak('Wonderful! Marked as taken.', () => {
-                    setTimeout(() => closeVoiceModal(), 1500);
+                    setTimeout(() => closeVoiceModal(), 1800);
                 });
             } else {
+                await missReminder(id);
                 setVoiceState('success');
                 setVoiceTitle('⚠️ Logged as missed. Caregiver notified.');
-                await missReminder(id);
-                await loadDashboard();
                 speak('Logged. Caregiver has been notified.', () => {
-                    setTimeout(() => closeVoiceModal(), 1500);
+                    setTimeout(() => closeVoiceModal(), 1800);
                 });
             }
-        } catch (e) {
-            console.error('Error confirming reminder:', e);
+            loadDashboard();
+        } catch {
             setVoiceState('error');
             setVoiceTitle('Could not update. Please try again.');
         }
     };
 
-    const handleSnoozeReminder = (id) => {
-        stopAlarmSound();
-        closeVoiceModal();
-        checkedIds.current.add(id);
-        // Remove from checkedIds after 5 minutes to trigger alarm again
-        setTimeout(() => {
-            checkedIds.current.delete(id);
-        }, 5 * 60 * 1000);
-        speak('Alarm snoozed for 5 minutes. I will remind you again.');
-        showAlert('⏰ Alarm Snoozed', 'Medication reminder snoozed for 5 minutes.');
-    };
-
-    const handleDirectTakeMed = async (rem) => {
-        stopAlarmSound();
-        const medName = rem.title.split(' - ').slice(1).join(' - ') || rem.title;
-        // Immediate optimistic UI update
-        setReminders(prev => prev.map(r => r.id === rem.id ? { ...r, is_completed: true } : r));
-        checkedIds.current.add(rem.id);
-        try {
-            await completeReminder(rem.id);
-            await loadDashboard();
-            speak(`Great job! ${medName} marked as taken. Caregiver notified.`);
-            showAlert('✅ Medication Taken', `${medName} has been recorded as taken.`);
-        } catch (e) {
-            console.error('Error in handleDirectTakeMed:', e);
-            await loadDashboard();
-        }
-    };
-
     const closeVoiceModal = () => {
-        stopAlarmSound();
+        stopRepeatingSpeech();
         setVoiceModal(false);
         setVoiceState('idle');
         setActiveReminder(null);
@@ -829,15 +694,6 @@ export default function PatientDashboard({ navigation }) {
                                     <View style={styles.missedBtnInner}>
                                         <Ionicons name="close-circle" size={22} color="white" />
                                         <Text style={styles.voiceBtnTextSmall}>NOT TAKEN</Text>
-                                    </View>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.voiceBtn, styles.snoozeBtn]}
-                                    onPress={() => handleSnoozeReminder(activeReminder.id)}
-                                >
-                                    <View style={styles.snoozeBtnInner}>
-                                        <Ionicons name="time" size={20} color="white" />
-                                        <Text style={styles.voiceBtnTextSmall}>SNOOZE 5M</Text>
                                     </View>
                                 </TouchableOpacity>
                             </View>
@@ -1330,35 +1186,17 @@ export default function PatientDashboard({ navigation }) {
                     </View>
 
                     {nextPending ? (
-                        <View style={styles.nextMedCard}>
-                            <View style={styles.nextMedTopRow}>
-                                <View style={styles.nextMedIconBg}>
-                                    <Ionicons name="medkit" size={32} color="#7c3aed" />
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 14 }}>
-                                    <Text style={styles.nextMedTitle}>
-                                        {nextPending.title.split(' - ').slice(1).join(' - ') || nextPending.title}
-                                    </Text>
-                                    <Text style={styles.nextMedTime}>
-                                        Due Today at {parseUTC(nextPending.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </Text>
-                                </View>
+                        <View style={styles.nextMedBox}>
+                            <View style={styles.nextMedIconBg}>
+                                <Ionicons name="medkit" size={36} color="#7c3aed" />
                             </View>
-                            <View style={styles.nextMedActionRow}>
-                                <TouchableOpacity
-                                    style={styles.directTakenBtn}
-                                    onPress={() => handleDirectTakeMed(nextPending)}
-                                >
-                                    <Ionicons name="checkmark-circle" size={18} color="white" />
-                                    <Text style={styles.directTakenText}>MARK AS TAKEN</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={styles.directAlarmTestBtn}
-                                    onPress={() => triggerVoiceReminder(nextPending)}
-                                >
-                                    <Ionicons name="notifications" size={16} color="#7c3aed" />
-                                    <Text style={styles.directAlarmTestText}>Ring Alarm</Text>
-                                </TouchableOpacity>
+                            <View style={{ flex: 1, marginLeft: 16 }}>
+                                <Text style={styles.nextMedTitle}>
+                                    {nextPending.title.split(' - ').slice(1).join(' - ') || nextPending.title}
+                                </Text>
+                                <Text style={styles.nextMedTime}>
+                                    Due Today at {parseUTC(nextPending.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
                             </View>
                         </View>
                     ) : (
@@ -1794,81 +1632,6 @@ const styles = StyleSheet.create({
     },
     dismissText: {
         color: '#cbd5e1',
-        fontWeight: 'bold',
-        fontSize: 12
-    },
-    snoozeBtn: {
-        flex: 1,
-        borderRadius: 16,
-        overflow: 'hidden'
-    },
-    snoozeBtnInner: {
-        backgroundColor: '#d97706',
-        paddingVertical: 14,
-        paddingHorizontal: 8,
-        borderRadius: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4
-    },
-    nextMedCard: {
-        backgroundColor: '#f5f3ff',
-        padding: 16,
-        borderRadius: 18,
-        borderWidth: 1.5,
-        borderColor: '#ddd6fe',
-        shadowColor: '#7c3aed',
-        shadowOpacity: 0.08,
-        shadowRadius: 6,
-        elevation: 2
-    },
-    nextMedTopRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12
-    },
-    nextMedActionRow: {
-        flexDirection: 'row',
-        gap: 10,
-        width: '100%'
-    },
-    directTakenBtn: {
-        flex: 1.3,
-        backgroundColor: '#10b981',
-        paddingVertical: 11,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        shadowColor: '#10b981',
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 3
-    },
-    directTakenText: {
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: 12,
-        letterSpacing: 0.3
-    },
-    directAlarmTestBtn: {
-        flex: 1,
-        backgroundColor: '#ede9fe',
-        borderWidth: 1.5,
-        borderColor: '#c4b5fd',
-        paddingVertical: 11,
-        paddingHorizontal: 8,
-        borderRadius: 12,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 5
-    },
-    directAlarmTestText: {
-        color: '#6d28d9',
         fontWeight: 'bold',
         fontSize: 12
     },

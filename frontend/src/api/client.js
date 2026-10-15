@@ -184,16 +184,6 @@ export const completeReminder = async (reminderId) => {
     return response.data;
 };
 
-export const uncompleteReminder = async (reminderId) => {
-    const response = await client.put(`/uncomplete-reminder/${reminderId}`);
-    return response.data;
-};
-
-export const toggleReminder = async (reminderId) => {
-    const response = await client.put(`/toggle-reminder/${reminderId}`);
-    return response.data;
-};
-
 export const updateReminder = async (reminderId, title, time) => {
     const response = await client.put(`/update-reminder/${reminderId}`, { title, time, is_completed: false });
     return response.data;

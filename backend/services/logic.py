@@ -93,18 +93,10 @@ def delete_reminder(db: Session, reminder_id: int):
         db.commit()
     return reminder
 
-def complete_reminder(db: Session, reminder_id: int, is_completed: bool = True):
+def complete_reminder(db: Session, reminder_id: int):
     reminder = db.query(models.Reminder).filter(models.Reminder.id == reminder_id).first()
     if reminder:
-        reminder.is_completed = is_completed
-        db.commit()
-        db.refresh(reminder)
-    return reminder
-
-def toggle_reminder(db: Session, reminder_id: int):
-    reminder = db.query(models.Reminder).filter(models.Reminder.id == reminder_id).first()
-    if reminder:
-        reminder.is_completed = not bool(reminder.is_completed)
+        reminder.is_completed = True
         db.commit()
         db.refresh(reminder)
     return reminder
