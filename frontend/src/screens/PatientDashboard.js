@@ -325,12 +325,12 @@ export default function PatientDashboard({ navigation }) {
     useEffect(() => {
         loadDashboard();
         autoTrackLocation();
-        const pollInterval = setInterval(loadDashboard, 7000);
+        const pollInterval = setInterval(loadDashboard, 4000);
         return () => clearInterval(pollInterval);
     }, []);
 
     useEffect(() => {
-        const interval = setInterval(checkForDueMedications, 10000);
+        const interval = setInterval(() => checkForDueMedications(), 2000);
         return () => clearInterval(interval);
     }, [reminders]);
 
@@ -355,6 +355,7 @@ export default function PatientDashboard({ navigation }) {
             const [user, data] = await Promise.all([getUserRole(), fetchReminders()]);
             setCurrentUser(user);
             setReminders(data);
+            checkForDueMedications(data);
         } catch (err) {
             console.error('Failed to load patient dashboard:', err);
         }
@@ -362,22 +363,30 @@ export default function PatientDashboard({ navigation }) {
 
     const checkForDueMedications = (reminderList = reminders) => {
         const list = Array.isArray(reminderList) ? reminderList : reminders;
+        if (!list || list.length === 0) return;
         const now = new Date();
-        const currentHours = now.getHours();
-        const currentMinutes = now.getMinutes();
 
         for (const rem of list) {
             if (rem.is_completed) continue;
             if (checkedIds.current.has(rem.id)) continue;
 
             const scheduledDate = parseUTC(rem.time);
-            const schedHours = scheduledDate.getHours();
-            const schedMinutes = scheduledDate.getMinutes();
+            if (isNaN(scheduledDate.getTime())) continue;
 
-            // Trigger ONLY when system clock reaches exact scheduled hour and minute
-            const isTimeMatch = (currentHours === schedHours) && (currentMinutes === schedMinutes);
+            const timeDiffMs = now.getTime() - scheduledDate.getTime();
 
-            if (isTimeMatch) {
+            // Check if same calendar day
+            const isSameDay = (
+                now.getFullYear() === scheduledDate.getFullYear() &&
+                now.getMonth() === scheduledDate.getMonth() &&
+                now.getDate() === scheduledDate.getDate()
+            );
+
+            // Trigger when due:
+            // Condition: same day, and time has arrived (allows 5s buffer before scheduled time to 60 minutes after)
+            const isDue = isSameDay && (timeDiffMs >= -5000) && (timeDiffMs <= 60 * 60 * 1000);
+
+            if (isDue) {
                 checkedIds.current.add(rem.id);
                 triggerVoiceReminder(rem);
                 break;

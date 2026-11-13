@@ -170,8 +170,9 @@ export const fetchCaregivers = async () => {
     return response.data;
 };
 
-export const addReminder = async (title, timeStr) => {
-    const response = await client.post('/add-reminder', {
+export const addReminder = async (title, timeStr, patientId = null) => {
+    const url = patientId ? `/add-reminder?patient_id=${patientId}` : '/add-reminder';
+    const response = await client.post(url, {
         title,
         description: "",
         time: timeStr
@@ -226,7 +227,13 @@ export const fetchNotes = async () => {
 
 export const parseUTC = (dateString) => {
     if (!dateString) return new Date();
-    return new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z');
+    if (dateString instanceof Date) return dateString;
+    let s = String(dateString).trim().replace(' ', 'T');
+    if (!s.endsWith('Z') && !s.includes('+') && !s.slice(-6).match(/[-+]\d{2}:\d{2}/)) {
+        s += 'Z';
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? new Date(dateString) : d;
 };
 
 export const addNote = async (title, content) => {

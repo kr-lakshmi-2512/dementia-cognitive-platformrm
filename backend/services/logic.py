@@ -64,7 +64,11 @@ def _resolve_target_user(db: Session, current_user_id: int) -> int:
     return current_user_id
 
 def create_reminder(db: Session, reminder: schemas.ReminderCreate, user_id: int):
-    target_id = _resolve_target_user(db, user_id)
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if target_user and target_user.role == "Patient":
+        target_id = user_id
+    else:
+        target_id = _resolve_target_user(db, user_id)
     db_reminder = models.Reminder(**reminder.model_dump(), user_id=target_id)
     db.add(db_reminder)
     db.commit()

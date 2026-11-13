@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert, FlatList, ScrollView, StyleSheet, Text, TextInput,
-    TouchableOpacity, View, ActivityIndicator
+    TouchableOpacity, View, ActivityIndicator, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
     fetchConversation, fetchPatients, getUserById, getUserRole,
     sendMessage, predictRisk, linkPatientByEmail, parseUTC, fetchCaregivers,
-    unlinkPatient
+    unlinkPatient, addReminder
 } from '../api/client';
 
 // Helper function to generate dynamic behavior & risk graph telemetry per patient for Doctor
@@ -105,6 +105,14 @@ export default function DoctorDashboard() {
     const [aiResult, setAiResult]                   = useState(null);
     const [loadingAi, setLoadingAi]                 = useState(false);
     const [activeTab, setActiveTab]                 = useState('overview');
+
+    // Voice Medication Prescription Assignment
+    const [medName, setMedName]                     = useState('');
+    const [medTime, setMedTime]                     = useState('In 2 Mins');
+    const [isListeningVoice, setIsListeningVoice]   = useState(false);
+    const [voiceStatusText, setVoiceStatusText]     = useState('');
+    const [medConfirm, setMedConfirm]               = useState(null);
+    const [schedulingLoading, setSchedulingLoading] = useState(false);
 
     useEffect(() => {
         loadDashboardData();
@@ -239,6 +247,156 @@ export default function DoctorDashboard() {
             loadDashboardData();
         } catch (error) {
             Alert.alert('Error', error.response?.data?.detail || 'Could not link patient.');
+        }
+    };
+
+    const startDoctorVoicePrescription = () => {
+        if (Platform.OS !== 'web') {
+            Alert.alert('Voice Feature', 'Voice prescription is optimized for web browser.');
+            return;
+        }
+
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+            Alert.alert('Speech Not Supported', 'Web Speech Recognition is not supported by your browser. Please type the medicine name and select the time.');
+            return;
+        }
+
+        try {
+            const recognition = new SpeechRec();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                setIsListeningVoice(true);
+                setVoiceStatusText('🎙️ Listening... Speak prescription (e.g. "Donepezil 5mg in 2 minutes" or "Memantine 10mg at 3:00 PM")');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                setVoiceStatusText(`Heard: "${transcript}"`);
+                parseSpokenPrescription(transcript);
+            };
+
+            recognition.onerror = (e) => {
+                console.log('Voice recognition error:', e);
+                setIsListeningVoice(false);
+                setVoiceStatusText('Could not capture voice clearly. You can also type the prescription directly.');
+            };
+
+            recognition.onend = () => {
+                setIsListeningVoice(false);
+            };
+
+            recognition.start();
+        } catch (e) {
+            console.error('Speech recognition exception:', e);
+            setIsListeningVoice(false);
+        }
+    };
+
+    const parseSpokenPrescription = (spoken) => {
+        let text = spoken.trim();
+        text = text.replace(/^(prescribe|give|assign|patient needs to take|schedule|add|please prescribe|please give)\s+/i, '');
+
+        const relMinMatch = text.match(/in\s+(\d+)\s*(minute|minutes|min|mins)/i);
+        const relSecMatch = text.match(/in\s+(\d+)\s*(second|seconds|sec|secs)/i);
+        const nowMatch = text.match(/\b(right now|immediately|now)\b/i);
+        const atTimeMatch = text.match(/at\s+(\d{1,2}(:\d{2})?\s*(am|pm)?)/i);
+
+        let extractedTime = null;
+        let cleanMed = text;
+
+        if (relMinMatch) {
+            const mins = parseInt(relMinMatch[1], 10);
+            extractedTime = `In ${mins} Mins`;
+            cleanMed = text.replace(relMinMatch[0], '').trim();
+        } else if (relSecMatch || nowMatch) {
+            extractedTime = 'Right Now (+30s)';
+            cleanMed = text.replace(relSecMatch ? relSecMatch[0] : nowMatch[0], '').trim();
+        } else if (atTimeMatch) {
+            extractedTime = atTimeMatch[1].trim();
+            cleanMed = text.replace(atTimeMatch[0], '').trim();
+        }
+
+        cleanMed = cleanMed.replace(/^(at|for|time|dosage|medicine)\s+/i, '').trim();
+        if (cleanMed) {
+            cleanMed = cleanMed.charAt(0).toUpperCase() + cleanMed.slice(1);
+            setMedName(cleanMed);
+        }
+        if (extractedTime) {
+            setMedTime(extractedTime);
+        }
+    };
+
+    const handleScheduleMedication = async () => {
+        if (!selectedPatient) {
+            Alert.alert('Patient Required', 'Please select a patient from above before assigning a prescription.');
+            return;
+        }
+        if (!medName.trim()) {
+            Alert.alert('Medicine Required', 'Please speak or enter the medicine name (e.g. Donepezil 5mg).');
+            return;
+        }
+
+        setSchedulingLoading(true);
+        try {
+            let finalDate = new Date();
+            const timeInput = medTime.trim();
+
+            if (timeInput.includes('Right Now') || timeInput.toLowerCase().includes('now')) {
+                finalDate = new Date(Date.now() + 30 * 1000);
+            } else if (timeInput.toLowerCase().includes('in 2 min')) {
+                finalDate = new Date(Date.now() + 2 * 60 * 1000);
+            } else if (timeInput.toLowerCase().includes('in 5 min')) {
+                finalDate = new Date(Date.now() + 5 * 60 * 1000);
+            } else if (timeInput.toLowerCase().startsWith('in ') && timeInput.toLowerCase().includes('min')) {
+                const m = parseInt(timeInput.replace(/[^0-9]/g, ''), 10) || 2;
+                finalDate = new Date(Date.now() + m * 60 * 1000);
+            } else if (timeInput.includes(':')) {
+                const parts = timeInput.split(' ');
+                const [hourStr, minStr] = parts[0].split(':');
+                const modifier = parts[1] ? parts[1].toUpperCase() : '';
+                let hours = parseInt(hourStr, 10);
+                const minutes = parseInt(minStr, 10) || 0;
+                if (modifier === 'PM' && hours !== 12) hours += 12;
+                if (modifier === 'AM' && hours === 12) hours = 0;
+                finalDate.setHours(hours);
+                finalDate.setMinutes(minutes);
+                finalDate.setSeconds(0);
+                finalDate.setMilliseconds(0);
+            }
+
+            const titleString = `Medication - ${medName.trim()}`;
+            const savedName = medName.trim();
+            const displayTimeStr = finalDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            await addReminder(titleString, finalDate.toISOString(), selectedPatient.id);
+
+            // 🔊 Voice speech synthesis feedback
+            const speakMsg = `Medication prescription for ${savedName} scheduled for patient ${selectedPatient.full_name} at ${displayTimeStr}.`;
+            if (Platform.OS === 'web' && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+                const utt = new window.SpeechSynthesisUtterance(speakMsg);
+                utt.lang = 'en-IN';
+                utt.rate = 0.92;
+                window.speechSynthesis.speak(utt);
+            }
+
+            setMedConfirm({
+                name: savedName,
+                time: displayTimeStr,
+                patientName: selectedPatient.full_name
+            });
+
+            setMedName('');
+            setVoiceStatusText('');
+        } catch (err) {
+            console.error('Failed to schedule medication:', err);
+            Alert.alert('Error', err.response?.data?.detail || 'Could not schedule medication reminder.');
+        } finally {
+            setSchedulingLoading(false);
         }
     };
 
@@ -579,6 +737,141 @@ export default function DoctorDashboard() {
                 </View>
             )}
 
+            {/* 🎙️ Voice Prescription & Medication Assignment */}
+            {selectedPatient && (
+                <View style={styles.sectionCard}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>🎙️ Voice Prescription & Schedule</Text>
+                            <Text style={styles.patientSubLabel}>
+                                Assign voice-activated medication reminders to <Text style={{ fontWeight: 'bold', color: '#7c3aed' }}>{selectedPatient.full_name}</Text>
+                            </Text>
+                        </View>
+                        <View style={{ backgroundColor: '#f3e8ff', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                            <Text style={{ color: '#7c3aed', fontSize: 11, fontWeight: 'bold' }}>Rx Doctor Order</Text>
+                        </View>
+                    </View>
+
+                    {/* Microphone Voice Trigger Button */}
+                    <TouchableOpacity
+                        style={[
+                            styles.voiceMicBtn,
+                            isListeningVoice && styles.voiceMicBtnActive
+                        ]}
+                        onPress={startDoctorVoicePrescription}
+                    >
+                        <Ionicons
+                            name={isListeningVoice ? "mic" : "mic-outline"}
+                            size={28}
+                            color="white"
+                        />
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                            <Text style={styles.voiceMicTitle}>
+                                {isListeningVoice ? '🔴 Listening... Speak prescription now' : '🎙️ Tap to Speak Prescription'}
+                            </Text>
+                            <Text style={styles.voiceMicSubtitle}>
+                                {isListeningVoice
+                                    ? 'Speak e.g. "Donepezil 5mg in 2 minutes"'
+                                    : 'Transcribes medicine name & time automatically'}
+                            </Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    {voiceStatusText ? (
+                        <View style={styles.voiceStatusBox}>
+                            <Ionicons name="chatbubble-ellipses-outline" size={16} color="#7c3aed" />
+                            <Text style={styles.voiceStatusText}>{voiceStatusText}</Text>
+                        </View>
+                    ) : null}
+
+                    {/* Prescription Details Inputs */}
+                    <View style={{ marginTop: 14 }}>
+                        <Text style={styles.inputLabel}>Medicine Name & Dosage:</Text>
+                        <TextInput
+                            style={styles.textInputFull}
+                            value={medName}
+                            onChangeText={setMedName}
+                            placeholder="e.g. Donepezil 5mg, Memantine 10mg..."
+                            placeholderTextColor="#94a3b8"
+                        />
+
+                        <Text style={[styles.inputLabel, { marginTop: 12 }]}>Scheduled Time / Quick Preset:</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                            {[
+                                'Right Now (+30s)',
+                                'In 2 Mins',
+                                'In 5 Mins',
+                                '09:00 AM',
+                                '01:00 PM',
+                                '06:00 PM',
+                                '09:00 PM'
+                            ].map((preset) => (
+                                <TouchableOpacity
+                                    key={preset}
+                                    style={[
+                                        styles.timePresetChip,
+                                        medTime === preset && styles.timePresetChipActive
+                                    ]}
+                                    onPress={() => setMedTime(preset)}
+                                >
+                                    <Text style={[
+                                        styles.timePresetText,
+                                        medTime === preset && styles.timePresetTextActive
+                                    ]}>
+                                        {preset}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        <TextInput
+                            style={[styles.textInputFull, { marginTop: 6 }]}
+                            value={medTime}
+                            onChangeText={setMedTime}
+                            placeholder="Selected time (e.g. In 2 Mins or 02:30 PM)"
+                            placeholderTextColor="#94a3b8"
+                        />
+
+                        {/* Submit Button */}
+                        <TouchableOpacity
+                            style={[styles.scheduleBtn, schedulingLoading && { opacity: 0.7 }]}
+                            onPress={handleScheduleMedication}
+                            disabled={schedulingLoading}
+                        >
+                            {schedulingLoading ? (
+                                <ActivityIndicator color="white" size="small" />
+                            ) : (
+                                <>
+                                    <Ionicons name="calendar-outline" size={20} color="white" />
+                                    <Text style={styles.scheduleBtnText}>
+                                        Assign & Send to Patient Dashboard
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Confirmation Banner */}
+                    {medConfirm && (
+                        <View style={styles.confirmBanner}>
+                            <Ionicons name="checkmark-circle" size={26} color="#16a34a" />
+                            <View style={{ flex: 1, marginLeft: 10 }}>
+                                <Text style={styles.confirmTitle}>✅ Medication Assigned to Patient!</Text>
+                                <Text style={styles.confirmText}>
+                                    Prescribed <Text style={{ fontWeight: 'bold' }}>{medConfirm.name}</Text> for <Text style={{ fontWeight: 'bold' }}>{medConfirm.patientName}</Text> at <Text style={{ fontWeight: 'bold' }}>{medConfirm.time}</Text>.
+                                </Text>
+                                <Text style={{ fontSize: 11, color: '#15803d', marginTop: 2 }}>
+                                    Patient dashboard will speak and display the reminder automatically at the scheduled time.
+                                </Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setMedConfirm(null)} style={{ padding: 4 }}>
+                                <Ionicons name="close" size={20} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
+            )}
+
             {/* Caregiver Coordination & Chat */}
             <View style={styles.sectionCard}>
                 <Text style={styles.sectionTitle}>💬 Direct Caregiver Consultation</Text>
@@ -785,4 +1078,48 @@ const styles = StyleSheet.create({
     circadianRow: { backgroundColor: '#f8fafc', padding: 10, borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0' },
     circadianTrack: { height: 8, backgroundColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden' },
     circadianFill: { height: '100%', borderRadius: 4 },
+
+    /* Voice Prescription & Schedule Styles */
+    voiceMicBtn: {
+        backgroundColor: '#7c3aed', borderRadius: 16, padding: 14,
+        flexDirection: 'row', alignItems: 'center', marginTop: 12,
+        shadowColor: '#7c3aed', shadowOpacity: 0.3, shadowRadius: 8, elevation: 3
+    },
+    voiceMicBtnActive: {
+        backgroundColor: '#dc2626', shadowColor: '#dc2626'
+    },
+    voiceMicTitle: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+    voiceMicSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 2 },
+    voiceStatusBox: {
+        backgroundColor: '#f5f3ff', padding: 10, borderRadius: 10,
+        flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8,
+        borderWidth: 1, borderColor: '#ddd6fe'
+    },
+    voiceStatusText: { color: '#6d28d9', fontSize: 12, flex: 1, fontWeight: '500' },
+    inputLabel: { fontSize: 13, fontWeight: 'bold', color: '#334155', marginBottom: 6 },
+    textInputFull: {
+        backgroundColor: '#f8fafc', borderWidth: 1.5, borderColor: '#cbd5e1',
+        borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: '#1e293b'
+    },
+    timePresetChip: {
+        backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 8,
+        borderRadius: 10, marginRight: 8, borderWidth: 1, borderColor: '#e2e8f0'
+    },
+    timePresetChipActive: {
+        backgroundColor: '#7c3aed', borderColor: '#6d28d9'
+    },
+    timePresetText: { color: '#475569', fontWeight: 'bold', fontSize: 12 },
+    timePresetTextActive: { color: 'white' },
+    scheduleBtn: {
+        backgroundColor: '#059669', borderRadius: 14, paddingVertical: 14,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14,
+        shadowColor: '#059669', shadowOpacity: 0.25, shadowRadius: 6, elevation: 2
+    },
+    scheduleBtnText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+    confirmBanner: {
+        backgroundColor: '#f0fdf4', borderWidth: 1.5, borderColor: '#86efac',
+        borderRadius: 14, padding: 12, flexDirection: 'row', alignItems: 'center', marginTop: 14
+    },
+    confirmTitle: { color: '#15803d', fontWeight: 'bold', fontSize: 14 },
+    confirmText: { color: '#166534', fontSize: 12, marginTop: 2 }
 });

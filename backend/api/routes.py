@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import asyncio
 from datetime import datetime, timezone
 
@@ -37,12 +37,16 @@ async def dispatch_automated_alert(delay: float, target_user_id: int, reminder_t
 def add_reminder(
     reminder_in: schemas.ReminderCreate,
     background_tasks: BackgroundTasks,
+    patient_id: Optional[int] = None,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if current_user.role == "Patient":
         raise HTTPException(status_code=403, detail="Patients are not authorized to create reminders.")
-    target_id = services._resolve_target_user(db, current_user.id)
+    if patient_id:
+        target_id = patient_id
+    else:
+        target_id = services._resolve_target_user(db, current_user.id)
     rem_db = services.create_reminder(db, reminder=reminder_in, user_id=target_id)
     
     try:
