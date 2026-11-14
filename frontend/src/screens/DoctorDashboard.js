@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
     fetchConversation, fetchPatients, getUserById, getUserRole,
     sendMessage, predictRisk, linkPatientByEmail, parseUTC, fetchCaregivers,
-    unlinkPatient, addReminder
+    unlinkPatient, addReminder, deleteCaregiver
 } from '../api/client';
 
 // Helper function to generate dynamic behavior & risk graph telemetry per patient for Doctor
@@ -100,6 +100,7 @@ export default function DoctorDashboard() {
     const [draftMessage, setDraftMessage]           = useState('');
     const [linkPatientEmail, setLinkPatientEmail]   = useState('');
     const [removedPatientIds, setRemovedPatientIds] = useState([]);
+    const [removedCaregiverIds, setRemovedCaregiverIds] = useState([]);
     
     // AI & Clinical Logs
     const [aiResult, setAiResult]                   = useState(null);
@@ -202,6 +203,24 @@ export default function DoctorDashboard() {
                 setSelectedPatient(nextList.length > 0 ? nextList[0] : null);
             }
             return nextList;
+        });
+    };
+
+    const handleRemoveCaregiver = async (cg) => {
+        try {
+            await deleteCaregiver(cg.id);
+        } catch (err) {
+            // If 403/404, still remove locally but warn
+            console.warn('Backend caregiver delete error:', err?.response?.data?.detail || err);
+        }
+        // Always remove from UI immediately
+        setRemovedCaregiverIds(prev => [...prev, cg.id]);
+        setCaregiverList(prev => {
+            const remaining = prev.filter(c => c.id !== cg.id);
+            if (selectedChatCaregiver?.id === cg.id) {
+                setSelectedChatCaregiver(remaining.length > 0 ? remaining[0] : null);
+            }
+            return remaining;
         });
     };
 
@@ -878,22 +897,49 @@ export default function DoctorDashboard() {
                 
                 {/* Horizontal Caregiver Selection Chips */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 12 }}>
-                    {caregiverList.map((cg) => (
-                        <TouchableOpacity
-                            key={cg.id}
-                            style={[
-                                styles.patientPill,
-                                selectedChatCaregiver?.id === cg.id && styles.patientPillActive,
-                                { paddingVertical: 8, paddingHorizontal: 12 }
-                            ]}
-                            onPress={() => setSelectedChatCaregiver(cg)}
-                        >
-                            <Ionicons name="shield-checkmark" size={16} color={selectedChatCaregiver?.id === cg.id ? 'white' : '#7c3aed'} style={{ marginRight: 4 }} />
-                            <Text style={[styles.patientPillName, selectedChatCaregiver?.id === cg.id && styles.whiteText, { fontSize: 13 }]}>
-                                Caregiver: {cg.full_name}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                    {caregiverList.map((cg) => {
+                        const isSelected = selectedChatCaregiver?.id === cg.id;
+                        return (
+                            <View
+                                key={cg.id}
+                                style={[
+                                    styles.patientPill,
+                                    isSelected && styles.patientPillActive,
+                                    { paddingVertical: 6, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }
+                                ]}
+                            >
+                                {/* Select / highlight this caregiver */}
+                                <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                                    onPress={() => setSelectedChatCaregiver(cg)}
+                                >
+                                    <Ionicons name="shield-checkmark" size={16} color={isSelected ? 'white' : '#7c3aed'} style={{ marginRight: 5 }} />
+                                    <Text style={[styles.patientPillName, isSelected && styles.whiteText, { fontSize: 13 }]}>
+                                        Caregiver: {cg.full_name}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {/* ✕ Delete / Remove button */}
+                                <TouchableOpacity
+                                    onPress={() => handleRemoveCaregiver(cg)}
+                                    style={{
+                                        backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : '#fee2e2',
+                                        borderRadius: 8,
+                                        width: 22,
+                                        height: 22,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginLeft: 4,
+                                        borderWidth: 1,
+                                        borderColor: isSelected ? 'rgba(255,255,255,0.5)' : '#fca5a5',
+                                    }}
+                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                >
+                                    <Text style={{ color: isSelected ? 'white' : '#dc2626', fontSize: 13, fontWeight: 'bold', lineHeight: 16 }}>✕</Text>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    })}
                 </ScrollView>
 
                 {selectedChatCaregiver ? (

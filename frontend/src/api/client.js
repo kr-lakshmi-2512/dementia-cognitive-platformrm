@@ -299,4 +299,14 @@ export const unlinkPatient = async (patientId) => {
     return response.data;
 };
 
+export const deleteCaregiver = async (caregiverId) => {
+    const response = await client.delete(`/delete-caregiver/${caregiverId}`);
+    return response.data;
+};
+
+export const deleteDoctor = async (doctorId) => {
+    const response = await client.delete(`/delete-doctor/${doctorId}`);
+    return response.data;
+};
+
 export default client;

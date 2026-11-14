@@ -8,7 +8,7 @@ import {
     getUserRole, getUserById, fetchAlerts, deleteAlert, fetchConversation,
     fetchPatients, fetchReminders, sendMessage, linkPatientByEmail,
     fetchPatientLocation, parseUTC, predictRisk, addReminder, fetchDoctors,
-    unlinkPatient
+    unlinkPatient, deleteDoctor
 } from '../api/client';
 
 // Helper function to synthesize emergency siren audio sound and speech alert
@@ -150,6 +150,7 @@ export default function CaregiverDashboard({ navigation }) {
     const [activeTab, setActiveTab]                 = useState('overview');
     const [selectedAnalyticsPatient, setSelectedAnalyticsPatient] = useState(null);
     const [removedPatientIds, setRemovedPatientIds] = useState([]);
+    const [removedDoctorIds, setRemovedDoctorIds]   = useState([]);
 
     // Patient AI & Modal state
     const [patientAiData, setPatientAiData]         = useState({});
@@ -361,6 +362,22 @@ export default function CaregiverDashboard({ navigation }) {
                 ]
             );
         }
+    };
+
+    const handleRemoveDoctor = async (member) => {
+        try {
+            await deleteDoctor(member.id);
+        } catch (err) {
+            console.warn('Backend doctor delete error:', err?.response?.data?.detail || err);
+        }
+        setRemovedDoctorIds(prev => [...prev, member.id]);
+        setTeamMembers(prev => {
+            const remaining = prev.filter(d => d.id !== member.id);
+            if (selectedChatUser?.id === member.id) {
+                setSelectedChatUser(remaining.length > 0 ? remaining[0] : null);
+            }
+            return remaining;
+        });
     };
 
     const handleOpenWhatsApp = (patient) => {
@@ -791,17 +808,48 @@ export default function CaregiverDashboard({ navigation }) {
             <View style={styles.sectionCard}>
                 <Text style={styles.sectionTitle}>💬 Doctor Consultation Chat</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                    {teamMembers.map((member) => (
-                        <TouchableOpacity
-                            key={member.id}
-                            style={[styles.chip, selectedChatUser?.id === member.id && styles.chipActive]}
-                            onPress={() => setSelectedChatUser(member)}
-                        >
-                            <Text style={[styles.chipText, selectedChatUser?.id === member.id && styles.whiteText]}>
-                                Dr. {member.full_name}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
+                    {teamMembers.map((member) => {
+                        const isSelected = selectedChatUser?.id === member.id;
+                        return (
+                            <View
+                                key={member.id}
+                                style={[
+                                    styles.chip,
+                                    isSelected && styles.chipActive,
+                                    { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10 }
+                                ]}
+                            >
+                                {/* Select this doctor */}
+                                <TouchableOpacity
+                                    style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+                                    onPress={() => setSelectedChatUser(member)}
+                                >
+                                    <Text style={[styles.chipText, isSelected && styles.whiteText]}>
+                                        Dr. {member.full_name}
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {/* ✕ Delete button */}
+                                <TouchableOpacity
+                                    onPress={() => handleRemoveDoctor(member)}
+                                    style={{
+                                        backgroundColor: isSelected ? 'rgba(255,255,255,0.3)' : '#fee2e2',
+                                        borderRadius: 8,
+                                        width: 22,
+                                        height: 22,
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginLeft: 4,
+                                        borderWidth: 1,
+                                        borderColor: isSelected ? 'rgba(255,255,255,0.5)' : '#fca5a5',
+                                    }}
+                                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                >
+                                    <Text style={{ color: isSelected ? 'white' : '#dc2626', fontSize: 13, fontWeight: 'bold', lineHeight: 16 }}>✕</Text>
+                                </TouchableOpacity>
+                            </View>
+                        );
+                    })}
                 </ScrollView>
 
                 {selectedChatUser ? (

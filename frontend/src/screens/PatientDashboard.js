@@ -325,6 +325,12 @@ export default function PatientDashboard({ navigation }) {
     useEffect(() => {
         loadDashboard();
         autoTrackLocation();
+        // Pre-request mic permission so voice works automatically on alarm
+        if (Platform.OS === 'web' && navigator.mediaDevices) {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => { stream.getTracks().forEach(t => t.stop()); })
+                .catch(() => {});
+        }
         const pollInterval = setInterval(loadDashboard, 4000);
         return () => clearInterval(pollInterval);
     }, []);
@@ -405,6 +411,34 @@ export default function PatientDashboard({ navigation }) {
         }
     };
 
+    const startVoiceListening = (reminderId) => {
+        if (Platform.OS !== 'web') return;
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) return;
+        try {
+            const recognition = new SpeechRec();
+            recognition.lang = 'en-US';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.onresult = (event) => {
+                const spoken = event.results[0][0].transcript.toLowerCase().trim();
+                if (spoken.includes('not taken') || spoken.includes('no') || spoken.includes('skip') || spoken.includes('missed')) {
+                    handleVoiceConfirm(reminderId, false);
+                } else if (spoken.includes('taken') || spoken.includes('yes') || spoken.includes('done') || spoken.includes('ok')) {
+                    handleVoiceConfirm(reminderId, true);
+                } else {
+                    // didn't catch a valid word — listen again
+                    setTimeout(() => startVoiceListening(reminderId), 500);
+                }
+            };
+            recognition.onerror = () => {
+                // on error retry after short delay
+                setTimeout(() => startVoiceListening(reminderId), 1000);
+            };
+            recognition.start();
+        } catch (e) {}
+    };
+
     const triggerVoiceReminder = (reminder) => {
         stopRepeatingSpeech();
         setActiveReminder(reminder);
@@ -423,6 +457,7 @@ export default function PatientDashboard({ navigation }) {
             speak(announcement, () => {
                 if (!isRepeatingRef.current) return;
                 setVoiceState('listening');
+                startVoiceListening(reminder.id);
                 repeatTimerRef.current = setTimeout(() => {
                     if (isRepeatingRef.current) {
                         setVoiceState('speaking');
@@ -706,6 +741,25 @@ export default function PatientDashboard({ navigation }) {
                                     </View>
                                 </TouchableOpacity>
                             </View>
+                        )}
+
+                        {/* 🎙️ Tap to speak button */}
+                        {activeReminder && (
+                            <TouchableOpacity
+                                onPress={() => startVoiceListening(activeReminder.id)}
+                                style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                                    gap: 10, backgroundColor: voiceState === 'listening' ? '#059669' : 'rgba(255,255,255,0.18)',
+                                    borderRadius: 16, paddingVertical: 14, paddingHorizontal: 28,
+                                    marginTop: 10, borderWidth: 2,
+                                    borderColor: voiceState === 'listening' ? '#34d399' : 'rgba(255,255,255,0.35)',
+                                }}
+                            >
+                                <Ionicons name={voiceState === 'listening' ? 'mic' : 'mic-outline'} size={24} color={voiceState === 'listening' ? '#34d399' : 'white'} />
+                                <Text style={{ color: voiceState === 'listening' ? '#34d399' : 'white', fontWeight: 'bold', fontSize: 15 }}>
+                                    {voiceState === 'listening' ? '🎙️ Listening... Say "Taken"' : '🎙️ Tap & Say "Taken" / "Not Taken"'}
+                                </Text>
+                            </TouchableOpacity>
                         )}
 
                         <TouchableOpacity style={styles.dismissBtn} onPress={closeVoiceModal}>

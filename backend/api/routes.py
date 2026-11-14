@@ -200,9 +200,35 @@ def get_patients(current_user: models.User = Depends(get_current_user), db: Sess
 def get_doctors(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return services.get_all_doctors(db)
 
+@router.delete("/delete-doctor/{doctor_id}")
+def delete_doctor_endpoint(
+    doctor_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["Caregiver", "Admin"]:
+        raise HTTPException(status_code=403, detail="Only caregivers can remove doctors from their panel.")
+    result = services.delete_doctor(db, doctor_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Doctor not found.")
+    return result
+
 @router.get("/caregivers", response_model=List[schemas.UserResponse])
 def get_caregivers(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return services.get_all_caregivers(db)
+
+@router.delete("/delete-caregiver/{caregiver_id}")
+def delete_caregiver_endpoint(
+    caregiver_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in ["Doctor", "Admin"]:
+        raise HTTPException(status_code=403, detail="Only doctors can remove caregivers.")
+    result = services.delete_caregiver(db, caregiver_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Caregiver not found.")
+    return result
 
 @router.get("/users/{user_id}", response_model=schemas.UserResponse)
 def get_user(user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

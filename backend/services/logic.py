@@ -225,8 +225,32 @@ def get_patients_for_user(db: Session, user: models.User):
 def get_all_doctors(db: Session):
     return db.query(models.User).filter(models.User.role == "Doctor").all()
 
+def delete_doctor(db: Session, doctor_id: int):
+    doctor = db.query(models.User).filter(models.User.id == doctor_id, models.User.role == "Doctor").first()
+    if not doctor:
+        return None
+    # Unlink all patients currently assigned to this doctor
+    linked_patients = db.query(models.User).filter(models.User.doctor_id == doctor_id).all()
+    for patient in linked_patients:
+        patient.doctor_id = None
+    db.delete(doctor)
+    db.commit()
+    return {"message": f"Doctor {doctor.full_name} removed successfully."}
+
 def get_all_caregivers(db: Session):
     return db.query(models.User).filter(models.User.role == "Caregiver").all()
+
+def delete_caregiver(db: Session, caregiver_id: int):
+    caregiver = db.query(models.User).filter(models.User.id == caregiver_id, models.User.role == "Caregiver").first()
+    if not caregiver:
+        return None
+    # Unlink all patients currently linked to this caregiver
+    linked_patients = db.query(models.User).filter(models.User.caregiver_id == caregiver_id).all()
+    for patient in linked_patients:
+        patient.caregiver_id = None
+    db.delete(caregiver)
+    db.commit()
+    return {"message": f"Caregiver {caregiver.full_name} removed successfully."}
 
 def link_patient_to_user(db: Session, patient_id: int, user: models.User):
     patient = db.query(models.User).filter(models.User.id == patient_id, models.User.role == "Patient").first()
