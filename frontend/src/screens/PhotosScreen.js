@@ -59,6 +59,7 @@ const captureDataURL = (videoEl) => {
 const ICON_COLORS = ['#7c3aed','#16a34a','#dc2626','#d97706','#0284c7','#db2777','#065f46','#1d4ed8'];
 
 export default function PhotosScreen({ navigation }) {
+    const canGoBack = navigation?.canGoBack?.() ?? false;
     const [members,     setMembers]     = useState([]);
     const [enrolled,    setEnrolled]    = useState({});
     const [isSyncing,   setIsSyncing]   = useState(false);
@@ -372,9 +373,11 @@ export default function PhotosScreen({ navigation }) {
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hBtn}>
-                    <Ionicons name="arrow-back" size={24} color="#1f1545" />
-                </TouchableOpacity>
+                {canGoBack && (
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.hBtn}>
+                        <Ionicons name="arrow-back" size={24} color="#1f1545" />
+                    </TouchableOpacity>
+                )}
                 <View style={{ flex: 1, alignItems: 'center' }}>
                     <Text style={styles.hTitle}>🧠 Family Memory Directory</Text>
                     <Text style={styles.hSub}>

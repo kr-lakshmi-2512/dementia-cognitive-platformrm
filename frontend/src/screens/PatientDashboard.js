@@ -294,9 +294,11 @@ export default function PatientDashboard({ navigation }) {
 
 
     const pulseAnim  = useRef(new Animated.Value(1)).current;
-    const checkedIds = useRef(new Set());
-    const repeatTimerRef = useRef(null);
-    const isRepeatingRef = useRef(false);
+    const checkedIds      = useRef(new Set());
+    const repeatTimerRef  = useRef(null);
+    const isRepeatingRef  = useRef(false);
+    const recognitionRef  = useRef(null);
+    const isListeningRef  = useRef(false);
 
     const OBJECT_LOGS = [
         { name: 'Glasses / Spectacles', lastSeen: 'Bedside Nightstand', time: '8:30 AM' },
@@ -411,32 +413,83 @@ export default function PatientDashboard({ navigation }) {
         }
     };
 
+    const stopVoiceListening = () => {
+        isListeningRef.current = false;
+        if (recognitionRef.current) {
+            try { recognitionRef.current.abort(); } catch (e) {}
+            recognitionRef.current = null;
+        }
+        setVoiceState(prev => prev === 'listening' ? 'speaking' : prev);
+    };
+
     const startVoiceListening = (reminderId) => {
         if (Platform.OS !== 'web') return;
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) return;
+        if (!SpeechRec) {
+            setVoiceTitle('Voice not supported. Please tap TAKEN button.');
+            return;
+        }
+        // Stop previous instance cleanly
+        isListeningRef.current = true;
+        if (recognitionRef.current) {
+            try { recognitionRef.current.abort(); } catch (e) {}
+            recognitionRef.current = null;
+        }
         try {
-            const recognition = new SpeechRec();
-            recognition.lang = 'en-US';
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.onresult = (event) => {
-                const spoken = event.results[0][0].transcript.toLowerCase().trim();
-                if (spoken.includes('not taken') || spoken.includes('no') || spoken.includes('skip') || spoken.includes('missed')) {
+            const rec = new SpeechRec();
+            recognitionRef.current = rec;
+            rec.lang = 'en-US';
+            rec.continuous = false;
+            rec.interimResults = false;
+            rec.maxAlternatives = 5;
+
+            rec.onstart = () => {
+                setVoiceState('listening');
+                setVoiceTitle('🎙️ Listening... Say "Taken" or "Not Taken"');
+            };
+
+            rec.onresult = (event) => {
+                // Collect all transcripts across all alternatives
+                let spoken = '';
+                for (let i = 0; i < event.results[0].length; i++) {
+                    spoken += event.results[0][i].transcript.toLowerCase() + ' ';
+                }
+                spoken = spoken.trim();
+                setVoiceTitle(`Heard: "${spoken}"`);
+                // Check NOT TAKEN first (contains word taken)
+                if (spoken.includes('not') || spoken.includes('skip') || spoken.includes('miss') || spoken.includes('later') || spoken.includes('no')) {
+                    isListeningRef.current = false;
                     handleVoiceConfirm(reminderId, false);
-                } else if (spoken.includes('taken') || spoken.includes('yes') || spoken.includes('done') || spoken.includes('ok')) {
+                } else if (spoken.includes('tak') || spoken.includes('yes') || spoken.includes('done') || spoken.includes('ok') || spoken.includes('finish')) {
+                    isListeningRef.current = false;
                     handleVoiceConfirm(reminderId, true);
                 } else {
-                    // didn't catch a valid word — listen again
-                    setTimeout(() => startVoiceListening(reminderId), 500);
+                    // didn't understand — will restart in onend
+                    setVoiceTitle(`❓ Heard: "${spoken}". Try again...`);
                 }
             };
-            recognition.onerror = () => {
-                // on error retry after short delay
-                setTimeout(() => startVoiceListening(reminderId), 1000);
+
+            rec.onerror = (e) => {
+                if (e.error !== 'aborted') {
+                    setVoiceTitle('🎙️ Mic error. Retrying...');
+                }
             };
-            recognition.start();
-        } catch (e) {}
+
+            rec.onend = () => {
+                recognitionRef.current = null;
+                // If still supposed to be listening — restart automatically
+                if (isListeningRef.current) {
+                    setTimeout(() => startVoiceListening(reminderId), 300);
+                } else {
+                    setVoiceState(prev => prev === 'listening' ? 'speaking' : prev);
+                }
+            };
+
+            rec.start();
+        } catch (e) {
+            setVoiceTitle('Could not start mic. Tap TAKEN button.');
+            console.log('Voice error:', e);
+        }
     };
 
     const triggerVoiceReminder = (reminder) => {
@@ -605,6 +658,7 @@ export default function PatientDashboard({ navigation }) {
 
     const closeVoiceModal = () => {
         stopRepeatingSpeech();
+        stopVoiceListening();
         setVoiceModal(false);
         setVoiceState('idle');
         setActiveReminder(null);
